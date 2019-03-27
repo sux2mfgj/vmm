@@ -1,5 +1,8 @@
 #include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/mm.h>
+#include <linux/anon_inodes.h>
 
 #include "vmx.h"
 
@@ -95,4 +98,49 @@ void vmx_tear_down(void)
 {
 	vmxoff();
 	free_page((unsigned long)vmxon_region);
+}
+
+static long vmm_vm_ioctl(struct file* filep, unsigned int ioctl, unsigned long arg)
+{
+        struct vm* vm = filep->private_data;
+        long r = -EFAULT;
+
+        return r;
+}
+static struct file_operations vmm_vm_fops = {.unlocked_ioctl = vmm_vm_ioctl};
+
+
+long vmm_dev_ioctl_create_vm(unsigned long arg)
+{
+        struct vm* vm;
+        struct file* file;
+        long r = -EINVAL;
+
+        vm = vzalloc(sizeof(struct vm));
+        if(!vm)
+        {
+                return -ENOMEM;
+        }
+
+        r = get_unused_fd_flags(O_CLOEXEC);
+        if (r < 0)
+        {
+                goto failed_get_fd;
+        }
+
+        file = anon_inode_getfile("kvm-vm", &vmm_vm_fops, vm, O_RDWR);
+        if(IS_ERR(file))
+        {
+                r = PTR_ERR(file);
+                goto failed_get_fd;
+        }
+
+        fd_install(r, file);
+
+        return r;
+
+failed_get_fd:
+        kvfree(vm);
+
+        return r;
 }

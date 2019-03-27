@@ -24,6 +24,7 @@ static long vmm_dev_ioctl(struct file *filep, unsigned int ioctl,
 		r = KVM_API_VERSION;
 		break;
 	default:
+                r = vmm_dev_ioctl_create_vm(arg);
 		break;
 	}
 	return r;
