@@ -2,6 +2,7 @@
 #include <linux/device.h>
 #include <linux/fs.h>
 
+#include "vmx.h"
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Shunsuke Mie <sux2mfgj@gmail.com>");
@@ -75,6 +76,18 @@ static int vmm_init(void)
         printk("vmm: Hello, world\n");
 
         r = register_device();
+        if(!r)
+        {
+                printk("vmm: filed to register a device\n");
+                return r;
+        }
+
+        r = vmx_setup();
+        if(!r)
+        {
+                printk("vmm: filed to configure intel VT-x\n");
+                return r;
+        }
 
         return r;
 }
