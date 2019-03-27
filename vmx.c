@@ -100,47 +100,45 @@ void vmx_tear_down(void)
 	free_page((unsigned long)vmxon_region);
 }
 
-static long vmm_vm_ioctl(struct file* filep, unsigned int ioctl, unsigned long arg)
+static long vmm_vm_ioctl(struct file *filep, unsigned int ioctl,
+			 unsigned long arg)
 {
-        struct vm* vm = filep->private_data;
-        long r = -EFAULT;
+	struct vm *vm = filep->private_data;
+	long r = -EFAULT;
 
-        return r;
+	return r;
 }
-static struct file_operations vmm_vm_fops = {.unlocked_ioctl = vmm_vm_ioctl};
 
+static struct file_operations vmm_vm_fops = { .unlocked_ioctl = vmm_vm_ioctl };
 
 long vmm_dev_ioctl_create_vm(unsigned long arg)
 {
-        struct vm* vm;
-        struct file* file;
-        long r = -EINVAL;
+	struct vm *vm;
+	struct file *file;
+	long r = -EINVAL;
 
-        vm = vzalloc(sizeof(struct vm));
-        if(!vm)
-        {
-                return -ENOMEM;
-        }
+	vm = vzalloc(sizeof(struct vm));
+	if (!vm) {
+		return -ENOMEM;
+	}
 
-        r = get_unused_fd_flags(O_CLOEXEC);
-        if (r < 0)
-        {
-                goto failed_get_fd;
-        }
+	r = get_unused_fd_flags(O_CLOEXEC);
+	if (r < 0) {
+		goto failed_get_fd;
+	}
 
-        file = anon_inode_getfile("kvm-vm", &vmm_vm_fops, vm, O_RDWR);
-        if(IS_ERR(file))
-        {
-                r = PTR_ERR(file);
-                goto failed_get_fd;
-        }
+	file = anon_inode_getfile("kvm-vm", &vmm_vm_fops, vm, O_RDWR);
+	if (IS_ERR(file)) {
+		r = PTR_ERR(file);
+		goto failed_get_fd;
+	}
 
-        fd_install(r, file);
+	fd_install(r, file);
 
-        return r;
+	return r;
 
 failed_get_fd:
-        kvfree(vm);
+	kvfree(vm);
 
-        return r;
+	return r;
 }
