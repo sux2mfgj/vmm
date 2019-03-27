@@ -20,6 +20,11 @@ static long vmm_dev_ioctl(struct file* filep,
 {
        long r = -EINVAL;
        return r;
+	switch (ioctl) {
+	case KVM_GET_API_VERSION:
+		r = KVM_API_VERSION;
+		break;
+	}
 }
 static struct file_operations vmm_fops = {.unlocked_ioctl = vmm_dev_ioctl};
 
