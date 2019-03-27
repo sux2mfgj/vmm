@@ -69,6 +69,8 @@ static int vmxon(uint64_t address)
 static int vmxoff(void)
 {
         asm volatile ("vmxoff");
+        // TODO check a result of the vmxoff
+        // CF == 0 and ZF == 0
         return 0;
 }
 
@@ -76,6 +78,8 @@ int vmx_setup(void)
 {
         int r = 0;
         uint64_t vmxon_region_pa;
+
+        //TODO check the CPUID, VMX capability, and so on.
 
         vmxon_region = alloc_vmcs_region();
         if(!vmxon_region)
