@@ -36,6 +36,7 @@ static int register_device(void)
         vmm_class = class_create(THIS_MODULE, CLASS_NAME);
         if (IS_ERR(vmm_class))
         {
+                printk(KERN_ALERT "vmm: failed to create a class\n");
                 r = PTR_ERR(vmm_class);
                 goto failed_class_create;
         }
@@ -43,6 +44,7 @@ static int register_device(void)
         vmm_device = device_create(vmm_class, NULL, MKDEV(majorNumber, 0), NULL, DEVICE_NAME);
         if(IS_ERR(vmm_device))
         {
+                printk(KERN_ALERT "vmm: failed to create a device\n");
                 r = PTR_ERR(vmm_device);
                 goto failed_create_device;
         }
