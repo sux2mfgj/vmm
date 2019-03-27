@@ -7,5 +7,6 @@ struct vm
 };
 
 int vmx_setup(void);
+void vmx_tear_down(void);
 
 #endif

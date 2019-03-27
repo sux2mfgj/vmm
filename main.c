@@ -76,14 +76,14 @@ static int vmm_init(void)
         printk("vmm: Hello, world\n");
 
         r = register_device();
-        if(!r)
+        if(r)
         {
                 printk("vmm: filed to register a device\n");
                 return r;
         }
 
         r = vmx_setup();
-        if(!r)
+        if(r)
         {
                 printk("vmm: error occured in configuration of intel VT-x\n");
                 return r;
@@ -94,6 +94,7 @@ static int vmm_init(void)
 
 static void vmm_exit(void)
 {
+        vmx_tear_down();
         unregister_device();
         printk("vmm: byebye\n");
 }

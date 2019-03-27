@@ -45,25 +45,35 @@ static struct vmcs* alloc_vmcs_region(void)
         return vmcs;
 }
 
-static void vmxon(uint64_t address)
+static int vmxon(uint64_t address)
 {
         uint32_t cr4;
-        uint64_t rflags;
+        //uint64_t rflags;
 
         // enable virtual machine extension
         asm volatile ("mov %%cr4, %0" : "=r"(cr4));
         cr4 |= X86_CR4_VME;
         asm volatile ("mov %0, %%cr4" : : "r"(cr4));
+
+        //TODO
+        return 0;
 }
 
 int vmx_setup(void)
 {
+        int r = 0;
         vmxon_region = alloc_vmcs_region();
         if(!vmxon_region)
         {
                 return -ENOMEM;
         }
 
+        r = vmxon(__pa(vmxon_region));
 
-        return 0;
+        return r;
+}
+
+void vmx_tear_down(void)
+{
+
 }
