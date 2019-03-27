@@ -85,7 +85,7 @@ static int vmm_init(void)
         r = vmx_setup();
         if(!r)
         {
-                printk("vmm: filed to configure intel VT-x\n");
+                printk("vmm: error occured in configuration of intel VT-x\n");
                 return r;
         }
 
