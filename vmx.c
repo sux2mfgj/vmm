@@ -100,11 +100,35 @@ void vmx_tear_down(void)
 	free_page((unsigned long)vmxon_region);
 }
 
+static long vmm_vm_ioctl_create_vcpu(struct vm* vm, unsigned int id)
+{
+
+        //TODO
+        return -EFAULT;
+}
+
 static long vmm_vm_ioctl(struct file *filep, unsigned int ioctl,
 			 unsigned long arg)
 {
 	struct vm *vm = filep->private_data;
 	long r = -EFAULT;
+
+        switch(ioctl)
+        {
+                case KVM_SET_TSS_ADDR:
+                        //TODO
+                        r = 0;
+                        break;
+                case KVM_SET_USER_MEMORY_REGION:
+                        //TODO
+                        r = 0;
+                        break;
+                case KVM_CREATE_VCPU:
+                        r = vmm_vm_ioctl_create_vcpu(vm, arg);
+                        break;
+                default:
+                        break;
+        }
 
 	return r;
 }

@@ -3,6 +3,11 @@
 
 #include <linux/kvm.h>
 
+struct vcpu
+{
+        unsigned int id;
+};
+
 struct vm
 {
         struct kvm_regs regs;
