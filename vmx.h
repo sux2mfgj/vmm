@@ -1,9 +1,12 @@
 #ifndef __VMM_VMX_H
 #define __VMM_VMX_H
 
+#include <linux/kvm.h>
+
 struct vm
 {
-
+        struct kvm_regs regs;
+        struct kvm_sregs sregs;
 };
 
 int vmx_setup(void);
