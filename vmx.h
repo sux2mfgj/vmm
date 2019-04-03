@@ -7,18 +7,16 @@
 #include "vmx.h"
 #include "config.h"
 
-struct vcpu
-{
-        unsigned int vpid;
-        unsigned int id;
+struct vcpu {
+	unsigned int vpid;
+	unsigned int id;
 };
 
-struct vm
-{
-        struct kvm_regs regs;
-        struct kvm_sregs sregs;
-//        struct mm_struct *mm;
-        struct vcpu *vcpus[VCPU_MAX];
+struct vm {
+	struct kvm_regs regs;
+	struct kvm_sregs sregs;
+	//        struct mm_struct *mm;
+	struct vcpu *vcpus[VCPU_MAX];
 };
 
 int vmx_setup(void);

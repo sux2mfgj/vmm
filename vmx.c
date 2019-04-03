@@ -101,55 +101,52 @@ void vmx_tear_down(void)
 	free_page((unsigned long)vmxon_region);
 }
 
-
-static long vmm_vcpu_ioctl(struct file *filp,
-			   unsigned int ioctl, unsigned long arg)
+static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
+			   unsigned long arg)
 {
-        return -EINVAL;
+	return -EINVAL;
 }
 
 static struct file_operations vmm_vcpu_fops = {
-        .unlocked_ioctl = vmm_vcpu_ioctl,
-//        .mmap = vmm_vcpu_mmap,
+	.unlocked_ioctl = vmm_vcpu_ioctl,
+	//        .mmap = vmm_vcpu_mmap,
 };
 
-static int create_vcpu_fd(struct vcpu* vcpu)
+static int create_vcpu_fd(struct vcpu *vcpu)
 {
-        //strlen("vmm-vcpu:00") == 11
-        char name[11];
+	//strlen("vmm-vcpu:00") == 11
+	char name[11];
 
-        snprintf(name, sizeof(name), "vmm-vcpu:%d", vcpu->id);
-        return anon_inode_getfd(name, &vmm_vcpu_fops, vcpu, O_RDWR | O_CLOEXEC);
+	snprintf(name, sizeof(name), "vmm-vcpu:%d", vcpu->id);
+	return anon_inode_getfd(name, &vmm_vcpu_fops, vcpu, O_RDWR | O_CLOEXEC);
 }
 
-static long vmm_vm_ioctl_create_vcpu(struct vm* vm, unsigned int id)
+static long vmm_vm_ioctl_create_vcpu(struct vm *vm, unsigned int id)
 {
-        struct vcpu *vcpu;
-        int vcpu_fd;
+	struct vcpu *vcpu;
+	int vcpu_fd;
 
-        if(id > VCPU_MAX)
-        {
-                return -EFAULT;
-        }
+	if (id > VCPU_MAX) {
+		return -EFAULT;
+	}
 
-        vcpu = kvmalloc(sizeof(struct vcpu), GFP_KERNEL);
-        // TODO use virtual processor identifire to increase speed.
-        vcpu->vpid = 0;
-        vcpu->id = id;
+	vcpu = kvmalloc(sizeof(struct vcpu), GFP_KERNEL);
+	// TODO use virtual processor identifire to increase speed.
+	vcpu->vpid = 0;
+	vcpu->id = id;
 
-        vm->vcpus[id] = vcpu;
+	vm->vcpus[id] = vcpu;
 
-        vcpu_fd = create_vcpu_fd(vcpu);
-        if(vcpu_fd < 0)
-        {
-                goto failed_create_vcpu;
-        }
+	vcpu_fd = create_vcpu_fd(vcpu);
+	if (vcpu_fd < 0) {
+		goto failed_create_vcpu;
+	}
 
-        return vcpu_fd;
+	return vcpu_fd;
 
 failed_create_vcpu:
-        kvfree(vcpu);
-        return -EFAULT;
+	kvfree(vcpu);
+	return -EFAULT;
 }
 
 static long vmm_vm_ioctl(struct file *filep, unsigned int ioctl,
@@ -158,22 +155,21 @@ static long vmm_vm_ioctl(struct file *filep, unsigned int ioctl,
 	struct vm *vm = filep->private_data;
 	long r = -EFAULT;
 
-        switch(ioctl)
-        {
-                case KVM_SET_TSS_ADDR:
-                        //TODO
-                        r = 0;
-                        break;
-                case KVM_SET_USER_MEMORY_REGION:
-                        //TODO
-                        r = 0;
-                        break;
-                case KVM_CREATE_VCPU:
-                        r = vmm_vm_ioctl_create_vcpu(vm, arg);
-                        break;
-                default:
-                        break;
-        }
+	switch (ioctl) {
+	case KVM_SET_TSS_ADDR:
+		//TODO
+		r = 0;
+		break;
+	case KVM_SET_USER_MEMORY_REGION:
+		//TODO
+		r = 0;
+		break;
+	case KVM_CREATE_VCPU:
+		r = vmm_vm_ioctl_create_vcpu(vm, arg);
+		break;
+	default:
+		break;
+	}
 
 	return r;
 }

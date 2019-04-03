@@ -23,8 +23,8 @@ static long vmm_dev_ioctl(struct file *filep, unsigned int ioctl,
 	case KVM_GET_API_VERSION:
 		r = KVM_API_VERSION;
 		break;
-        case KVM_CREATE_VM:
-                r = vmm_dev_ioctl_create_vm(arg);
+	case KVM_CREATE_VM:
+		r = vmm_dev_ioctl_create_vm(arg);
 	default:
 		break;
 	}
