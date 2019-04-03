@@ -5,6 +5,7 @@
 #include <linux/anon_inodes.h>
 
 #include "vmx.h"
+#include "config.h"
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Shunsuke Mie <sux2mfgj@gmail.com>");
@@ -100,10 +101,54 @@ void vmx_tear_down(void)
 	free_page((unsigned long)vmxon_region);
 }
 
+
+static long vmm_vcpu_ioctl(struct file *filp,
+			   unsigned int ioctl, unsigned long arg)
+{
+        return -EINVAL;
+}
+
+static struct file_operations vmm_vcpu_fops = {
+        .unlocked_ioctl = vmm_vcpu_ioctl,
+//        .mmap = vmm_vcpu_mmap,
+};
+
+static int create_vcpu_fd(struct vcpu* vcpu)
+{
+        //strlen("vmm-vcpu:00") == 11
+        char name[11];
+
+        snprintf(name, sizeof(name), "vmm-vcpu:%d", vcpu->id);
+        return anon_inode_getfd(name, &vmm_vcpu_fops, vcpu, O_RDWR | O_CLOEXEC);
+}
+
 static long vmm_vm_ioctl_create_vcpu(struct vm* vm, unsigned int id)
 {
+        struct vcpu *vcpu;
+        int vcpu_fd;
 
-        //TODO
+        if(id > VCPU_MAX)
+        {
+                return -EFAULT;
+        }
+
+        vcpu = kvmalloc(sizeof(struct vcpu), GFP_KERNEL);
+        // TODO use virtual processor identifire to increase speed.
+        vcpu->vpid = 0;
+        vcpu->id = id;
+
+        vm->vcpus[id] = vcpu;
+
+        vcpu_fd = create_vcpu_fd(vcpu);
+        if(vcpu_fd < 0)
+        {
+                goto failed_create_vcpu;
+        }
+
+        return vcpu_fd;
+
+failed_create_vcpu:
+        kvfree(vcpu);
         return -EFAULT;
 }
 
@@ -151,7 +196,7 @@ long vmm_dev_ioctl_create_vm(unsigned long arg)
 		goto failed_get_fd;
 	}
 
-	file = anon_inode_getfile("kvm-vm", &vmm_vm_fops, vm, O_RDWR);
+	file = anon_inode_getfile("vmm-vm", &vmm_vm_fops, vm, O_RDWR);
 	if (IS_ERR(file)) {
 		r = PTR_ERR(file);
 		goto failed_get_fd;
