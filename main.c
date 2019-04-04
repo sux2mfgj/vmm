@@ -25,6 +25,8 @@ static long vmm_dev_ioctl(struct file *filep, unsigned int ioctl,
 		break;
 	case KVM_CREATE_VM:
 		r = vmm_dev_ioctl_create_vm(arg);
+        case KVM_GET_VCPU_MMAP_SIZE:
+                break;
 	default:
 		break;
 	}

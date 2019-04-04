@@ -104,12 +104,24 @@ void vmx_tear_down(void)
 static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 			   unsigned long arg)
 {
+	switch (ioctl) {
+	default:
+		break;
+	}
+
 	return -EINVAL;
 }
 
+static int vmm_vcpu_mmap(struct file *file, struct vm_area_struct *vma)
+{
+        //TODO
+        return -EINVAL;
+}
+
+
 static struct file_operations vmm_vcpu_fops = {
 	.unlocked_ioctl = vmm_vcpu_ioctl,
-	//        .mmap = vmm_vcpu_mmap,
+	.mmap = vmm_vcpu_mmap,
 };
 
 static int create_vcpu_fd(struct vcpu *vcpu)
@@ -124,7 +136,8 @@ static int create_vcpu_fd(struct vcpu *vcpu)
 static long vmm_vm_ioctl_create_vcpu(struct vm *vm, unsigned int id)
 {
 	struct vcpu *vcpu;
-	int vcpu_fd;
+	struct page *page;
+	int r;
 
 	if (id > VCPU_MAX) {
 		return -EFAULT;
@@ -135,18 +148,26 @@ static long vmm_vm_ioctl_create_vcpu(struct vm *vm, unsigned int id)
 	vcpu->vpid = 0;
 	vcpu->id = id;
 
+	page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	if (!page) {
+		r = -ENOMEM;
+		goto failed_create_vcpu;
+	}
+	vcpu->run = page_address(page);
+
 	vm->vcpus[id] = vcpu;
 
-	vcpu_fd = create_vcpu_fd(vcpu);
-	if (vcpu_fd < 0) {
+	r = create_vcpu_fd(vcpu);
+	if (r < 0) {
+		r = -EFAULT;
 		goto failed_create_vcpu;
 	}
 
-	return vcpu_fd;
+	return r;
 
 failed_create_vcpu:
 	kvfree(vcpu);
-	return -EFAULT;
+	return -r;
 }
 
 static long vmm_vm_ioctl(struct file *filep, unsigned int ioctl,

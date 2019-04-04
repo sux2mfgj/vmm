@@ -10,6 +10,7 @@
 struct vcpu {
 	unsigned int vpid;
 	unsigned int id;
+        struct kvm_run* run;
 };
 
 struct vm {
