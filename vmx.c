@@ -105,6 +105,9 @@ static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 			   unsigned long arg)
 {
 	switch (ioctl) {
+	case KVM_GET_SREGS: {
+		break;
+	}
 	default:
 		break;
 	}
@@ -114,25 +117,25 @@ static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 
 static vm_fault_t vmm_vcpu_page_fault(struct vm_fault *vmf)
 {
-        struct vcpu *vcpu = vmf->vma->vm_file->private_data;
-        struct page *page;
+	struct vcpu *vcpu = vmf->vma->vm_file->private_data;
+	struct page *page;
 
-        page = virt_to_page(vcpu->run);
+	page = virt_to_page(vcpu->run);
 
-        //XXX: why the get_page is necessary?
-        get_page(page);
+	//XXX: why the get_page is necessary?
+	get_page(page);
 	vmf->page = page;
 	return 0;
 }
 
 static const struct vm_operations_struct vmm_vcpu_vm_ops = {
-        .fault = vmm_vcpu_page_fault,
+	.fault = vmm_vcpu_page_fault,
 };
 
 static int vmm_vcpu_mmap(struct file *file, struct vm_area_struct *vma)
 {
-        vma->vm_ops = &vmm_vcpu_vm_ops;
-        return 0;
+	vma->vm_ops = &vmm_vcpu_vm_ops;
+	return 0;
 }
 
 static struct file_operations vmm_vcpu_fops = {
@@ -193,17 +196,20 @@ static long vmm_vm_ioctl(struct file *filep, unsigned int ioctl,
 	long r = -EFAULT;
 
 	switch (ioctl) {
-	case KVM_SET_TSS_ADDR:
+	case KVM_SET_TSS_ADDR: {
 		//TODO
 		r = 0;
 		break;
-	case KVM_SET_USER_MEMORY_REGION:
+	}
+	case KVM_SET_USER_MEMORY_REGION: {
 		//TODO
 		r = 0;
 		break;
-	case KVM_CREATE_VCPU:
+	}
+	case KVM_CREATE_VCPU: {
 		r = vmm_vm_ioctl_create_vcpu(vm, arg);
-		break;
+
+	} break;
 	default:
 		break;
 	}
