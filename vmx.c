@@ -22,6 +22,7 @@ struct vmcs {
 };
 
 static struct vmcs *vmxon_region;
+static struct vmcs *vmcs;
 
 static struct vmcs *alloc_vmcs_region(void)
 {
@@ -100,6 +101,8 @@ void vmx_tear_down(void)
 	vmxoff();
 	free_page((unsigned long)vmxon_region);
 }
+
+// static long vcpu_get_sregs
 
 static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 			   unsigned long arg)
@@ -219,6 +222,12 @@ static long vmm_vm_ioctl(struct file *filep, unsigned int ioctl,
 
 static struct file_operations vmm_vm_fops = { .unlocked_ioctl = vmm_vm_ioctl };
 
+static inline void vmcs_load(struct vmcs* vmcs)
+{
+        uintptr_t physical_addr = __pa(vmcs);
+        asm volatile ("vmptrld %0" :: "m"(physical_addr));
+}
+
 long vmm_dev_ioctl_create_vm(unsigned long arg)
 {
 	struct vm *vm;
@@ -226,9 +235,16 @@ long vmm_dev_ioctl_create_vm(unsigned long arg)
 	long r = -EINVAL;
 
 	vm = vzalloc(sizeof(struct vm));
-	if (!vm) {
+	if (vm == NULL) {
 		return -ENOMEM;
 	}
+
+        vmcs = alloc_vmcs_region();
+        if(vmcs == NULL)
+        {
+                return -ENOMEM;
+        }
+        vmcs_load(vmcs);
 
 	r = get_unused_fd_flags(O_CLOEXEC);
 	if (r < 0) {
