@@ -228,6 +228,12 @@ static inline void vmcs_load(struct vmcs* vmcs)
         asm volatile ("vmptrld %0" :: "m"(physical_addr));
 }
 
+static inline void vmcs_clear(struct vmcs* vmcs)
+{
+        uintptr_t physical_addr = __pa(vmcs);
+        asm volatile ("vmclear %0" :: "m"(physical_addr));
+}
+
 long vmm_dev_ioctl_create_vm(unsigned long arg)
 {
 	struct vm *vm;
@@ -245,6 +251,7 @@ long vmm_dev_ioctl_create_vm(unsigned long arg)
                 return -ENOMEM;
         }
         vmcs_load(vmcs);
+        vmcs_clear(vmcs);
 
 	r = get_unused_fd_flags(O_CLOEXEC);
 	if (r < 0) {
