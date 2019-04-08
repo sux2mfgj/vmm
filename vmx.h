@@ -2,6 +2,7 @@
 #define __VMM_VMX_H
 
 #include <linux/kvm.h>
+#include <linux/kvm_host.h>
 #include <linux/mm.h>
 
 #include "vmx.h"
@@ -261,15 +262,12 @@ enum vmcs_field_encoding {
 	HOST_RIP = 0x00006c16,
 };
 
-struct arch {
-};
-
 struct vcpu {
 	unsigned int vpid;
 	unsigned int id;
 	struct kvm_run *run;
 
-	struct arch arch;
+	struct kvm_vcpu_arch arch;
 };
 
 struct vm {
