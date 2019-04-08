@@ -146,12 +146,12 @@ static void vmx_get_segment(struct kvm_segment *segment,
 	segment->g = (access_right_tmp >> 15) & 1;
 }
 
-static void vmx_get_desc_table(struct kvm_dtable* dtable,
-                enum vmcs_field_encoding base,
-                enum vmcs_field_encoding limit)
+static void vmx_get_desc_table(struct kvm_dtable *dtable,
+			       enum vmcs_field_encoding base,
+			       enum vmcs_field_encoding limit)
 {
-        dtable->base = vmcs_read(base);
-        dtable->limit = vmcs_read(limit);
+	dtable->base = vmcs_read(base);
+	dtable->limit = vmcs_read(limit);
 }
 
 static int vcpu_get_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
@@ -176,16 +176,26 @@ static int vcpu_get_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
 	vmx_get_segment(&sregs->ldt, GUEST_LDTR_BASE, GUEST_LDTR_LIMIT,
 			GUEST_LDTR_SELECTOR, GUEST_LDTR_ACCESS_RIGHTS);
 
-        vmx_get_desc_table(&sregs->idt, GUEST_IDTR_BASE, GUEST_IDTR_LIMIT);
-        vmx_get_desc_table(&sregs->gdt, GUEST_GDTR_BASE, GUEST_GDTR_LIMIT);
+	vmx_get_desc_table(&sregs->idt, GUEST_IDTR_BASE, GUEST_IDTR_LIMIT);
+	vmx_get_desc_table(&sregs->gdt, GUEST_GDTR_BASE, GUEST_GDTR_LIMIT);
 
-        sregs->cr0 = vmcs_read(GUEST_CR0);
-//         sregs->cr2 = ;
-        sregs->cr3 = vmcs_read(GUEST_CR3);
-        sregs->cr4 = vmcs_read(GUEST_CR4);
-//         sregs->cr8 = ;
-        //TODO
+	sregs->cr0 = vmcs_read(GUEST_CR0);
+	sregs->cr2 = vcpu->arch.cr2;
+	sregs->cr3 = vmcs_read(GUEST_CR3);
+	sregs->cr4 = vmcs_read(GUEST_CR4);
+	sregs->cr8 = vcpu->arch.cr8;
 
+	sregs->efer = vcpu->arch.efer;
+	sregs->apic_base = vcpu->arch.apic_base;
+
+	memset(sregs->interrupt_bitmap, 0, sizeof(sregs->interrupt_bitmap));
+
+	//TODO: do i need to setup the interrupt bitmaps?
+	// like,
+	// set_bit(vcpu->arch.interrupt.nr,
+	//              (unsigned long *)sregs->interrupt_bitmap);
+
+	r = 0;
 	return r;
 }
 
@@ -194,15 +204,34 @@ static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 {
 	struct kvm_vcpu *vcpu = filp->private_data;
 	struct kvm_sregs kvm_sregs;
+	void __user *argp = (void __user *)arg;
+
 	int r = -EFAULT;
 
 	switch (ioctl) {
 	case KVM_GET_SREGS: {
+		printk("vmm: KVM_GET_SREGS\n");
 		r = vcpu_get_kvm_sregs(vcpu, &kvm_sregs);
+		if (r) {
+			printk("vmm: failed vcpu_get_kvm_sregs\n");
+			r = -EINVAL;
+			break;
+		}
+		r = copy_to_user(argp, &kvm_sregs, sizeof(struct kvm_sregs));
+		if (r) {
+			printk("vmm: failed copy_to_user\n");
+			r = -EINVAL;
+			break;
+		}
 		break;
 	}
-	default:
+	//case KVM_SET_SREGS: {
+	//	break;
+	//}
+	default: {
+		printk("vmm: unknwown ioctl command for vcpu\n");
 		break;
+	}
 	}
 
 	return r;
@@ -266,6 +295,15 @@ static long vmm_vm_ioctl_create_vcpu(struct vm *vm, unsigned int id)
 		goto failed_create_vcpu;
 	}
 	vcpu->run = page_address(page);
+
+	// TODO: initialize other variables which is related architecture.
+	vcpu->arch.cr2 = 0;
+	vcpu->arch.cr8 = 0;
+	vcpu->arch.efer = 0;
+
+	// TODO: should implement a acpi emulator and set the base address
+	// maybe, this vmm cannot work well.
+	vcpu->arch.apic_base = 0;
 
 	vm->vcpus[id] = vcpu;
 
