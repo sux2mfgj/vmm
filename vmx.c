@@ -199,6 +199,12 @@ static int vcpu_get_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
 	return r;
 }
 
+static int vcpu_set_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
+{
+        int r = -EFAULT;
+        return r;
+}
+
 static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 			   unsigned long arg)
 {
@@ -225,9 +231,24 @@ static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 		}
 		break;
 	}
-	//case KVM_SET_SREGS: {
-	//	break;
-	//}
+	case KVM_SET_SREGS: {
+                printk("vmm: KVM_SET_SREGS\n");
+                r = copy_from_user(&kvm_sregs, arpg, sizeof(struct kvm_sregs));
+                if(r)
+                {
+                        printk("vmm: failed copy kvm_sregs from user\n");
+                        r = -EINVAL;
+                        break;
+                }
+                r = vcpu_set_kvm_sregs(vcpu, &kvm_sregs);
+                if(r)
+                {
+                        printk("vmm: failed vcpu_set_kvm_sregs\n");
+                        r = -EINVAL;
+                        break;
+                }
+		break;
+	}
 	default: {
 		printk("vmm: unknwown ioctl command for vcpu\n");
 		break;
