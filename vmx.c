@@ -3,6 +3,7 @@
 #include <linux/file.h>
 #include <linux/mm.h>
 #include <linux/anon_inodes.h>
+#include <linux/uaccess.h>
 
 #include "vmx.h"
 #include "config.h"
@@ -97,6 +98,12 @@ static inline unsigned long vmcs_read(enum vmcs_field_encoding encoding)
 	return value;
 }
 
+static void vmcs_write(enum vmcs_field_encoding encoding, unsigned long value)
+{
+        unsigned long field = encoding;
+        asm volatile("vmwrite %0, %1" :: "r"(field), "r"(value));
+}
+
 int vmx_setup(void)
 {
 	int r = 0;
@@ -146,12 +153,50 @@ static void vmx_get_segment(struct kvm_segment *segment,
 	segment->g = (access_right_tmp >> 15) & 1;
 }
 
+static void vmx_set_segment(struct kvm_segment *segment,
+                enum vmcs_field_encoding base,
+                enum vmcs_field_encoding limit,
+                enum vmcs_field_encoding selector,
+                enum vmcs_field_encoding access_right)
+{
+        u32 access_right_tmp = 0;
+
+        vmcs_write(base, segment->base);
+        vmcs_write(limit, segment->limit);
+        vmcs_write(selector, segment->selector);
+        if(segment->unusable || !segment->present)
+        {
+                access_right_tmp = 1 << 16;
+
+        }
+        else
+        {
+                access_right_tmp = segment->type & 15;
+                access_right_tmp |= (segment->s & 1) << 4;
+                access_right_tmp |= (segment->dpl & 3) << 5;
+                access_right_tmp |= (segment->present & 1) << 7;
+                access_right_tmp |= (segment->avl & 1) << 12;
+                access_right_tmp |= (segment->l & 1) << 13;
+                access_right_tmp |= (segment->db & 1) << 14;
+                access_right_tmp |= (segment->g & 1) << 15;
+        }
+        vmcs_write(access_right, access_right_tmp);
+}
+
 static void vmx_get_desc_table(struct kvm_dtable *dtable,
 			       enum vmcs_field_encoding base,
 			       enum vmcs_field_encoding limit)
 {
 	dtable->base = vmcs_read(base);
 	dtable->limit = vmcs_read(limit);
+}
+
+static void vmx_set_desc_table(struct kvm_dtable *dtable,
+                enum vmcs_field_encoding base,
+                enum vmcs_field_encoding limit)
+{
+        vmcs_write(base, dtable->base);
+        vmcs_write(limit, dtable->limit);
 }
 
 static int vcpu_get_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
@@ -202,6 +247,21 @@ static int vcpu_get_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
 static int vcpu_set_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
 {
         int r = -EFAULT;
+
+        vmx_set_desc_table(&sregs->gdt, GUEST_GDTR_BASE, GUEST_GDTR_LIMIT);
+        vmx_set_desc_table(&sregs->idt, GUEST_IDTR_BASE, GUEST_IDTR_LIMIT);
+
+        vmcs_write(GUEST_CR0, sregs->cr0);
+        vcpu->arch.cr2 = sregs->cr2;
+        vmcs_write(GUEST_CR3, sregs->cr3);
+        vmcs_write(GUEST_CR4, sregs->cr4);
+        vcpu->arch.cr8 = sregs->cr8;
+
+        vcpu->arch.efer = sregs->efer;
+        vcpu->arch.apic_base = sregs->apic_base;
+
+        //TODO
+        r = 0;
         return r;
 }
 
@@ -233,7 +293,7 @@ static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 	}
 	case KVM_SET_SREGS: {
                 printk("vmm: KVM_SET_SREGS\n");
-                r = copy_from_user(&kvm_sregs, arpg, sizeof(struct kvm_sregs));
+                r = copy_from_user(&kvm_sregs, argp, sizeof(struct kvm_sregs));
                 if(r)
                 {
                         printk("vmm: failed copy kvm_sregs from user\n");
