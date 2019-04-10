@@ -100,8 +100,8 @@ static inline unsigned long vmcs_read(enum vmcs_field_encoding encoding)
 
 static void vmcs_write(enum vmcs_field_encoding encoding, unsigned long value)
 {
-        unsigned long field = encoding;
-        asm volatile("vmwrite %0, %1" :: "r"(field), "r"(value));
+	unsigned long field = encoding;
+	asm volatile("vmwrite %0, %1" ::"r"(field), "r"(value));
 }
 
 int vmx_setup(void)
@@ -154,33 +154,30 @@ static void vmx_get_segment(struct kvm_segment *segment,
 }
 
 static void vmx_set_segment(struct kvm_segment *segment,
-                enum vmcs_field_encoding base,
-                enum vmcs_field_encoding limit,
-                enum vmcs_field_encoding selector,
-                enum vmcs_field_encoding access_right)
+			    enum vmcs_field_encoding base,
+			    enum vmcs_field_encoding limit,
+			    enum vmcs_field_encoding selector,
+			    enum vmcs_field_encoding access_right)
 {
-        u32 access_right_tmp = 0;
+	u32 access_right_tmp = 0;
 
-        vmcs_write(base, segment->base);
-        vmcs_write(limit, segment->limit);
-        vmcs_write(selector, segment->selector);
-        if(segment->unusable || !segment->present)
-        {
-                access_right_tmp = 1 << 16;
+	vmcs_write(base, segment->base);
+	vmcs_write(limit, segment->limit);
+	vmcs_write(selector, segment->selector);
+	if (segment->unusable || !segment->present) {
+		access_right_tmp = 1 << 16;
 
-        }
-        else
-        {
-                access_right_tmp = segment->type & 15;
-                access_right_tmp |= (segment->s & 1) << 4;
-                access_right_tmp |= (segment->dpl & 3) << 5;
-                access_right_tmp |= (segment->present & 1) << 7;
-                access_right_tmp |= (segment->avl & 1) << 12;
-                access_right_tmp |= (segment->l & 1) << 13;
-                access_right_tmp |= (segment->db & 1) << 14;
-                access_right_tmp |= (segment->g & 1) << 15;
-        }
-        vmcs_write(access_right, access_right_tmp);
+	} else {
+		access_right_tmp = segment->type & 15;
+		access_right_tmp |= (segment->s & 1) << 4;
+		access_right_tmp |= (segment->dpl & 3) << 5;
+		access_right_tmp |= (segment->present & 1) << 7;
+		access_right_tmp |= (segment->avl & 1) << 12;
+		access_right_tmp |= (segment->l & 1) << 13;
+		access_right_tmp |= (segment->db & 1) << 14;
+		access_right_tmp |= (segment->g & 1) << 15;
+	}
+	vmcs_write(access_right, access_right_tmp);
 }
 
 static void vmx_get_desc_table(struct kvm_dtable *dtable,
@@ -192,11 +189,11 @@ static void vmx_get_desc_table(struct kvm_dtable *dtable,
 }
 
 static void vmx_set_desc_table(struct kvm_dtable *dtable,
-                enum vmcs_field_encoding base,
-                enum vmcs_field_encoding limit)
+			       enum vmcs_field_encoding base,
+			       enum vmcs_field_encoding limit)
 {
-        vmcs_write(base, dtable->base);
-        vmcs_write(limit, dtable->limit);
+	vmcs_write(base, dtable->base);
+	vmcs_write(limit, dtable->limit);
 }
 
 static int vcpu_get_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
@@ -235,7 +232,7 @@ static int vcpu_get_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
 
 	memset(sregs->interrupt_bitmap, 0, sizeof(sregs->interrupt_bitmap));
 
-	//TODO: do i need to setup the interrupt bitmaps?
+	//TODO: do i need to setup the interrupt bitmap?
 	// like,
 	// set_bit(vcpu->arch.interrupt.nr,
 	//              (unsigned long *)sregs->interrupt_bitmap);
@@ -246,23 +243,41 @@ static int vcpu_get_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
 
 static int vcpu_set_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
 {
-        int r = -EFAULT;
+	int r = -EFAULT;
 
-        vmx_set_desc_table(&sregs->gdt, GUEST_GDTR_BASE, GUEST_GDTR_LIMIT);
-        vmx_set_desc_table(&sregs->idt, GUEST_IDTR_BASE, GUEST_IDTR_LIMIT);
+	vmx_set_desc_table(&sregs->gdt, GUEST_GDTR_BASE, GUEST_GDTR_LIMIT);
+	vmx_set_desc_table(&sregs->idt, GUEST_IDTR_BASE, GUEST_IDTR_LIMIT);
 
-        vmcs_write(GUEST_CR0, sregs->cr0);
-        vcpu->arch.cr2 = sregs->cr2;
-        vmcs_write(GUEST_CR3, sregs->cr3);
-        vmcs_write(GUEST_CR4, sregs->cr4);
-        vcpu->arch.cr8 = sregs->cr8;
+	vmcs_write(GUEST_CR0, sregs->cr0);
+	vcpu->arch.cr2 = sregs->cr2;
+	vmcs_write(GUEST_CR3, sregs->cr3);
+	vmcs_write(GUEST_CR4, sregs->cr4);
+	vcpu->arch.cr8 = sregs->cr8;
 
-        vcpu->arch.efer = sregs->efer;
-        vcpu->arch.apic_base = sregs->apic_base;
+	vcpu->arch.efer = sregs->efer;
+	vcpu->arch.apic_base = sregs->apic_base;
 
-        //TODO
-        r = 0;
-        return r;
+	vmx_set_segment(&sregs->cs, GUEST_CS_BASE, GUEST_CS_LIMIT,
+			GUEST_CS_SELECTOR, GUEST_CS_ACCESS_RIGHTS);
+	vmx_set_segment(&sregs->ds, GUEST_DS_BASE, GUEST_DS_LIMIT,
+			GUEST_DS_SELECTOR, GUEST_DS_ACCESS_RIGHTS);
+	vmx_set_segment(&sregs->es, GUEST_ES_BASE, GUEST_ES_LIMIT,
+			GUEST_ES_SELECTOR, GUEST_ES_ACCESS_RIGHTS);
+	vmx_set_segment(&sregs->fs, GUEST_FS_BASE, GUEST_FS_LIMIT,
+			GUEST_FS_SELECTOR, GUEST_FS_ACCESS_RIGHTS);
+	vmx_set_segment(&sregs->gs, GUEST_SS_BASE, GUEST_SS_LIMIT,
+			GUEST_SS_SELECTOR, GUEST_SS_ACCESS_RIGHTS);
+	vmx_set_segment(&sregs->ss, GUEST_SS_BASE, GUEST_SS_LIMIT,
+			GUEST_SS_SELECTOR, GUEST_SS_ACCESS_RIGHTS);
+
+	vmx_set_segment(&sregs->tr, GUEST_TR_BASE, GUEST_TR_LIMIT,
+			GUEST_TR_SELECTOR, GUEST_TR_ACCESS_RIGHTS);
+	vmx_set_segment(&sregs->ldt, GUEST_LDTR_BASE, GUEST_LDTR_LIMIT,
+			GUEST_LDTR_SELECTOR, GUEST_LDTR_ACCESS_RIGHTS);
+
+	//TODO
+	r = 0;
+	return r;
 }
 
 static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
@@ -292,25 +307,23 @@ static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 		break;
 	}
 	case KVM_SET_SREGS: {
-                printk("vmm: KVM_SET_SREGS\n");
-                r = copy_from_user(&kvm_sregs, argp, sizeof(struct kvm_sregs));
-                if(r)
-                {
-                        printk("vmm: failed copy kvm_sregs from user\n");
-                        r = -EINVAL;
-                        break;
-                }
-                r = vcpu_set_kvm_sregs(vcpu, &kvm_sregs);
-                if(r)
-                {
-                        printk("vmm: failed vcpu_set_kvm_sregs\n");
-                        r = -EINVAL;
-                        break;
-                }
+		printk("vmm: KVM_SET_SREGS\n");
+		r = copy_from_user(&kvm_sregs, argp, sizeof(struct kvm_sregs));
+		if (r) {
+			printk("vmm: failed copy kvm_sregs from user\n");
+			r = -EINVAL;
+			break;
+		}
+		r = vcpu_set_kvm_sregs(vcpu, &kvm_sregs);
+		if (r) {
+			printk("vmm: failed vcpu_set_kvm_sregs\n");
+			r = -EINVAL;
+			break;
+		}
 		break;
 	}
 	default: {
-		printk("vmm: unknwown ioctl command for vcpu\n");
+		printk("vmm: unknwown ioctl command for vcpu. [ %d ]\n", ioctl);
 		break;
 	}
 	}
