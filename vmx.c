@@ -196,7 +196,7 @@ static void vmx_set_desc_table(struct kvm_dtable *dtable,
 	vmcs_write(limit, dtable->limit);
 }
 
-static int vcpu_get_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
+static int vcpu_get_kvm_sregs(struct vcpu *vcpu, struct kvm_sregs *sregs)
 {
 	int r = -EFAULT;
 
@@ -241,7 +241,7 @@ static int vcpu_get_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
 	return r;
 }
 
-static int vcpu_set_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
+static int vcpu_set_kvm_sregs(struct vcpu *vcpu, struct kvm_sregs *sregs)
 {
 	int r = -EFAULT;
 
@@ -280,11 +280,78 @@ static int vcpu_set_kvm_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
 	return r;
 }
 
+static void register_write(struct vcpu *vcpu, enum regs reg,
+			   unsigned long val)
+{
+	vcpu->arch.regs[reg] = val;
+}
+
+static int vcpu_set_kvm_regs(struct vcpu *vcpu, struct kvm_regs *regs)
+{
+	int r = -EFAULT;
+	register_write(vcpu, REG_RAX, regs->rax);
+	register_write(vcpu, REG_RBX, regs->rbx);
+	register_write(vcpu, REG_RCX, regs->rcx);
+	register_write(vcpu, REG_RDX, regs->rdx);
+
+	register_write(vcpu, REG_RSP, regs->rsp);
+	register_write(vcpu, REG_RDI, regs->rdi);
+	register_write(vcpu, REG_RIP, regs->rip);
+
+	register_write(vcpu, REG_R8, regs->r8);
+	register_write(vcpu, REG_R9, regs->r9);
+	register_write(vcpu, REG_R10, regs->r10);
+	register_write(vcpu, REG_R11, regs->r11);
+	register_write(vcpu, REG_R12, regs->r12);
+	register_write(vcpu, REG_R13, regs->r13);
+	register_write(vcpu, REG_R14, regs->r14);
+	register_write(vcpu, REG_R15, regs->r15);
+
+	vmcs_write(GUEST_RFLAGS, regs->rflags);
+
+	r = 0;
+	return r;
+}
+
+static int vcpu_enter_guest(struct vcpu *vcpu)
+{
+    int r = -EINVAL;;
+	//preempt_disable();
+    return r;
+}
+
+static int vcpu_run(struct vcpu* vcpu)
+{
+    int r;
+    while(true)
+    {
+        if(vcpu->arch.mp_state == KVM_MP_STATE_RUNNABLE)
+        {
+            r = vcpu_enter_guest(vcpu);
+        }
+        else
+        {
+            return -EINVAL;
+        }
+    }
+}
+
+static int vcpu_kvm_run(struct vcpu *vcpu)
+{
+    int r = -EINVAL;
+
+
+    return r;
+}
+
+
 static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 			   unsigned long arg)
 {
-	struct kvm_vcpu *vcpu = filp->private_data;
+	struct vcpu *vcpu = filp->private_data;
 	struct kvm_sregs kvm_sregs;
+	struct kvm_regs kvm_regs;
+
 	void __user *argp = (void __user *)arg;
 
 	int r = -EFAULT;
@@ -320,6 +387,34 @@ static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 			r = -EINVAL;
 			break;
 		}
+		break;
+	}
+	case KVM_SET_REGS: {
+		printk("vmm: KVM_SET_RES\n");
+
+		r = copy_from_user(&kvm_regs, argp, sizeof(struct kvm_regs));
+		if (r) {
+			printk("vmm: failed copy the kvm_regs from userspace\n");
+			r = EINVAL;
+			break;
+		}
+		r = vcpu_set_kvm_regs(vcpu, &kvm_regs);
+		if (r) {
+			printk("vmm: failed set kvm_regs to vmcs area\n");
+			r = EINVAL;
+			break;
+		}
+		break;
+	}
+	case KVM_RUN: {
+		printk("vmm: kvm_run\n");
+        r = vcpu_kvm_run(vcpu);
+        if(r)
+        {
+            printk("vmm: failed run the vcpu(%d)\n", vcpu->id);
+            break;
+        }
+
 		break;
 	}
 	default: {
@@ -398,6 +493,7 @@ static long vmm_vm_ioctl_create_vcpu(struct vm *vm, unsigned int id)
 	// TODO: should implement a acpi emulator and set the base address
 	// maybe, this vmm cannot work well.
 	vcpu->arch.apic_base = 0;
+    vcpu->arch.mp_state = KVM_MP_STATE_RUNNABLE;
 
 	vm->vcpus[id] = vcpu;
 
