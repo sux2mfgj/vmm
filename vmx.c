@@ -222,13 +222,14 @@ static int vcpu_get_kvm_sregs(struct vcpu *vcpu, struct kvm_sregs *sregs)
 	vmx_get_desc_table(&sregs->gdt, GUEST_GDTR_BASE, GUEST_GDTR_LIMIT);
 
 	sregs->cr0 = vmcs_read(GUEST_CR0);
-	sregs->cr2 = vcpu->arch.cr2;
+	sregs->cr2 = vcpu->sregs.cr2;
 	sregs->cr3 = vmcs_read(GUEST_CR3);
 	sregs->cr4 = vmcs_read(GUEST_CR4);
-	sregs->cr8 = vcpu->arch.cr8;
+	sregs->cr8 = vcpu->sregs.cr8;
 
-	sregs->efer = vcpu->arch.efer;
-	sregs->apic_base = vcpu->arch.apic_base;
+    //TODO
+	//sregs->efer = vcpu->arch.efer;
+	//sregs->apic_base = vcpu->arch.apic_base;
 
 	memset(sregs->interrupt_bitmap, 0, sizeof(sregs->interrupt_bitmap));
 
@@ -243,89 +244,66 @@ static int vcpu_get_kvm_sregs(struct vcpu *vcpu, struct kvm_sregs *sregs)
 
 static int vcpu_set_kvm_sregs(struct vcpu *vcpu, struct kvm_sregs *sregs)
 {
-	int r = -EFAULT;
-
-	vmx_set_desc_table(&sregs->gdt, GUEST_GDTR_BASE, GUEST_GDTR_LIMIT);
-	vmx_set_desc_table(&sregs->idt, GUEST_IDTR_BASE, GUEST_IDTR_LIMIT);
-
-	vmcs_write(GUEST_CR0, sregs->cr0);
-	vcpu->arch.cr2 = sregs->cr2;
-	vmcs_write(GUEST_CR3, sregs->cr3);
-	vmcs_write(GUEST_CR4, sregs->cr4);
-	vcpu->arch.cr8 = sregs->cr8;
-
-	vcpu->arch.efer = sregs->efer;
-	vcpu->arch.apic_base = sregs->apic_base;
-
-	vmx_set_segment(&sregs->cs, GUEST_CS_BASE, GUEST_CS_LIMIT,
-			GUEST_CS_SELECTOR, GUEST_CS_ACCESS_RIGHTS);
-	vmx_set_segment(&sregs->ds, GUEST_DS_BASE, GUEST_DS_LIMIT,
-			GUEST_DS_SELECTOR, GUEST_DS_ACCESS_RIGHTS);
-	vmx_set_segment(&sregs->es, GUEST_ES_BASE, GUEST_ES_LIMIT,
-			GUEST_ES_SELECTOR, GUEST_ES_ACCESS_RIGHTS);
-	vmx_set_segment(&sregs->fs, GUEST_FS_BASE, GUEST_FS_LIMIT,
-			GUEST_FS_SELECTOR, GUEST_FS_ACCESS_RIGHTS);
-	vmx_set_segment(&sregs->gs, GUEST_SS_BASE, GUEST_SS_LIMIT,
-			GUEST_SS_SELECTOR, GUEST_SS_ACCESS_RIGHTS);
-	vmx_set_segment(&sregs->ss, GUEST_SS_BASE, GUEST_SS_LIMIT,
-			GUEST_SS_SELECTOR, GUEST_SS_ACCESS_RIGHTS);
-
-	vmx_set_segment(&sregs->tr, GUEST_TR_BASE, GUEST_TR_LIMIT,
-			GUEST_TR_SELECTOR, GUEST_TR_ACCESS_RIGHTS);
-	vmx_set_segment(&sregs->ldt, GUEST_LDTR_BASE, GUEST_LDTR_LIMIT,
-			GUEST_LDTR_SELECTOR, GUEST_LDTR_ACCESS_RIGHTS);
-
-	//TODO
-	r = 0;
-	return r;
-}
-
-static void register_write(struct vcpu *vcpu, enum regs reg,
-			   unsigned long val)
-{
-	vcpu->arch.regs[reg] = val;
+    memcpy(&vcpu->sregs, sregs, sizeof(struct kvm_sregs));
+	return 0;
 }
 
 static int vcpu_set_kvm_regs(struct vcpu *vcpu, struct kvm_regs *regs)
 {
-	int r = -EFAULT;
-	register_write(vcpu, REG_RAX, regs->rax);
-	register_write(vcpu, REG_RBX, regs->rbx);
-	register_write(vcpu, REG_RCX, regs->rcx);
-	register_write(vcpu, REG_RDX, regs->rdx);
+    memcpy(&vcpu->regs, regs, sizeof(struct kvm_regs));
+	return 0;
+}
 
-	register_write(vcpu, REG_RSP, regs->rsp);
-	register_write(vcpu, REG_RDI, regs->rdi);
-	register_write(vcpu, REG_RIP, regs->rip);
+static int update_vmcs_guest_state_area(struct vcpu* vcpu)
+{
+    vmcs_write(GUEST_CR0, vcpu->sregs.cr0);
+    vmcs_write(GUEST_CR3, vcpu->sregs.cr3);
+    vmcs_write(GUEST_CR4, vcpu->sregs.cr4);
 
-	register_write(vcpu, REG_R8, regs->r8);
-	register_write(vcpu, REG_R9, regs->r9);
-	register_write(vcpu, REG_R10, regs->r10);
-	register_write(vcpu, REG_R11, regs->r11);
-	register_write(vcpu, REG_R12, regs->r12);
-	register_write(vcpu, REG_R13, regs->r13);
-	register_write(vcpu, REG_R14, regs->r14);
-	register_write(vcpu, REG_R15, regs->r15);
+    vmcs_write(GUEST_DR7, vcpu->debug_regs.dr7);
+    vmcs_write(GUEST_RIP, vcpu->regs.rip);
+    vmcs_write(GUEST_RSP, vcpu->regs.rsp);
+    vmcs_write(GUEST_RFLAGS, vcpu->regs.rflags);
 
-	vmcs_write(GUEST_RFLAGS, regs->rflags);
+    vmx_set_segment(&vcpu->sregs.cs, GUEST_CS_BASE, GUEST_CS_LIMIT,
+			GUEST_CS_SELECTOR, GUEST_CS_ACCESS_RIGHTS);
+	vmx_set_segment(&vcpu->sregs.ss, GUEST_SS_BASE, GUEST_SS_LIMIT,
+			GUEST_SS_SELECTOR, GUEST_SS_ACCESS_RIGHTS);
+	vmx_set_segment(&vcpu->sregs.ds, GUEST_DS_BASE, GUEST_DS_LIMIT,
+			GUEST_DS_SELECTOR, GUEST_DS_ACCESS_RIGHTS);
+	vmx_set_segment(&vcpu->sregs.es, GUEST_ES_BASE, GUEST_ES_LIMIT,
+			GUEST_ES_SELECTOR, GUEST_ES_ACCESS_RIGHTS);
+	vmx_set_segment(&vcpu->sregs.fs, GUEST_FS_BASE, GUEST_FS_LIMIT,
+			GUEST_FS_SELECTOR, GUEST_FS_ACCESS_RIGHTS);
+	vmx_set_segment(&vcpu->sregs.gs, GUEST_GS_BASE, GUEST_GS_LIMIT,
+			GUEST_GS_SELECTOR, GUEST_GS_ACCESS_RIGHTS);
 
-	r = 0;
-	return r;
+	vmx_set_segment(&vcpu->sregs.tr, GUEST_TR_BASE, GUEST_TR_LIMIT,
+			GUEST_TR_SELECTOR, GUEST_TR_ACCESS_RIGHTS);
+	vmx_set_segment(&vcpu->sregs.ldt, GUEST_LDTR_BASE, GUEST_LDTR_LIMIT,
+			GUEST_LDTR_SELECTOR, GUEST_LDTR_ACCESS_RIGHTS);
+
+	vmx_set_desc_table(&vcpu->sregs.idt, GUEST_IDTR_BASE, GUEST_IDTR_LIMIT);
+	vmx_set_desc_table(&vcpu->sregs.gdt, GUEST_GDTR_BASE, GUEST_GDTR_LIMIT);
+
+    //TODO setup MSRs
+
+    return 0;
 }
 
 static int vcpu_enter_guest(struct vcpu *vcpu)
 {
     int r = -EINVAL;;
-	//preempt_disable();
+    r = update_vmcs_guest_state_area(vcpu);
     return r;
 }
 
 static int vcpu_run(struct vcpu* vcpu)
 {
-    int r;
+    int r = -EINVAL;
     while(true)
     {
-        if(vcpu->arch.mp_state == KVM_MP_STATE_RUNNABLE)
+        if(vcpu->mp_state == MP_RUNNABLE)
         {
             r = vcpu_enter_guest(vcpu);
         }
@@ -334,6 +312,8 @@ static int vcpu_run(struct vcpu* vcpu)
             return -EINVAL;
         }
     }
+
+    return r;
 }
 
 static int vcpu_kvm_run(struct vcpu *vcpu)
@@ -473,10 +453,20 @@ static long vmm_vm_ioctl_create_vcpu(struct vm *vm, unsigned int id)
 		return -EFAULT;
 	}
 
-	vcpu = kvmalloc(sizeof(struct vcpu), GFP_KERNEL);
-	// TODO use virtual processor identifire to increase speed.
+    // all of registers and states of the processor are zero.
+	vcpu = kvmalloc(sizeof(struct vcpu), GFP_KERNEL | __GFP_ZERO);
+	// TODO use the virtual processor identifire (VPID) to increase speed.
 	vcpu->vpid = 0;
 	vcpu->id = id;
+
+    if(id == 0) // this vcpu is BSP (bootstrap processor).
+    {
+        vcpu->mp_state = MP_RUNNABLE;
+    }
+    else    // others are AP.
+    {
+        vcpu->mp_state = MP_UNINITIALIZED;
+    }
 
 	page = alloc_page(GFP_KERNEL | __GFP_ZERO);
 	if (!page) {
@@ -484,16 +474,6 @@ static long vmm_vm_ioctl_create_vcpu(struct vm *vm, unsigned int id)
 		goto failed_create_vcpu;
 	}
 	vcpu->run = page_address(page);
-
-	// TODO: initialize other variables which is related architecture.
-	vcpu->arch.cr2 = 0;
-	vcpu->arch.cr8 = 0;
-	vcpu->arch.efer = 0;
-
-	// TODO: should implement a acpi emulator and set the base address
-	// maybe, this vmm cannot work well.
-	vcpu->arch.apic_base = 0;
-    vcpu->arch.mp_state = KVM_MP_STATE_RUNNABLE;
 
 	vm->vcpus[id] = vcpu;
 

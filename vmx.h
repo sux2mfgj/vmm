@@ -8,6 +8,16 @@
 #include "vmx.h"
 #include "config.h"
 
+enum mp_state {
+    MP_UNINITIALIZED = 0,
+    MP_INIT_RECEIVED = 1,
+    MP_SIPI_RECEIVED = 2,
+    MP_RUNNABLE = 3,
+    MP_HALTED = 4,
+    MP_OPERATING = 5,
+    //TODO add more some states of the x86_64 processor.
+};
+
 enum regs {
 	REG_RAX = 0,
 	REG_RBX = 1,
@@ -240,7 +250,7 @@ enum vmcs_field_encoding {
 	GUEST_GDTR_BASE = 0x00006816,
 	GUEST_IDTR_BASE = 0x00006818,
 	GUEST_DR7 = 0x0000681a,
-	GUEST_RPS = 0x0000681c,
+	GUEST_RSP = 0x0000681c,
 	GUEST_RIP = 0x0000681e,
 	GUEST_RFLAGS = 0x00006820,
 	GUEST_PENDING_DEBUG_EXECPTIONS = 0x00006822,
@@ -267,12 +277,14 @@ struct vcpu {
 	unsigned int id;
 	struct kvm_run *run;
 
-	struct kvm_vcpu_arch arch;
+	struct kvm_regs regs;
+	struct kvm_sregs sregs;
+    struct kvm_debugregs debug_regs;
+    enum mp_state mp_state;
+// 	struct kvm_vcpu_arch arch;
 };
 
 struct vm {
-	struct kvm_regs regs;
-	struct kvm_sregs sregs;
 	//        struct mm_struct *mm;
 	struct vcpu *vcpus[VCPU_MAX];
 };
