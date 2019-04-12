@@ -281,7 +281,7 @@ struct vcpu {
 	struct kvm_sregs sregs;
     struct kvm_debugregs debug_regs;
     enum mp_state mp_state;
-// 	struct kvm_vcpu_arch arch;
+    uint32_t smbase;
 };
 
 struct vm {
