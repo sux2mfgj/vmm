@@ -7,6 +7,7 @@
 
 #include "vmx.h"
 #include "config.h"
+#include "amd64_asm.h"
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Shunsuke Mie <sux2mfgj@gmail.com>");
@@ -254,6 +255,8 @@ static int vcpu_set_kvm_regs(struct vcpu *vcpu, struct kvm_regs *regs)
 	return 0;
 }
 
+
+
 static int update_vmcs_guest_state_area(struct vcpu* vcpu)
 {
     vmcs_write(GUEST_CR0, vcpu->sregs.cr0);
@@ -286,19 +289,29 @@ static int update_vmcs_guest_state_area(struct vcpu* vcpu)
 	vmx_set_desc_table(&vcpu->sregs.idt, GUEST_IDTR_BASE, GUEST_IDTR_LIMIT);
 	vmx_set_desc_table(&vcpu->sregs.gdt, GUEST_GDTR_BASE, GUEST_GDTR_LIMIT);
 
+    //TODO is it correct?
+    vmcs_write(HOST_CR0, read_cr0());
+//     vmcs_write(HOST_CR3, read_cr3());
+    vmcs_write(HOST_CR4, read_cr4());
+//     mcs_write(GUEST_IA32_DEBUGCTL_FULL, 0);
+//     vmcs_write(GUEST_IA32_SYSENTER_CS, 0);
+//     vmcs_write(GUEST_IA32_SYSENTER_ESP, 0);
+//     vmcs_write(GUEST_IA32_SYSENTER_EIP, 0);
+
     //TODO setup MSRs
 
-    return 0;
+    return -EINVAL;
 }
 
 static int vcpu_enter_guest(struct vcpu *vcpu)
 {
     int r = -EINVAL;;
     r = update_vmcs_guest_state_area(vcpu);
+    //TODO
     return r;
 }
 
-static int vcpu_run(struct vcpu* vcpu)
+static int vcpu_kvm_run(struct vcpu* vcpu)
 {
     int r = -EINVAL;
     while(true)
@@ -315,15 +328,6 @@ static int vcpu_run(struct vcpu* vcpu)
 
     return r;
 }
-
-static int vcpu_kvm_run(struct vcpu *vcpu)
-{
-    int r = -EINVAL;
-
-
-    return r;
-}
-
 
 static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 			   unsigned long arg)
