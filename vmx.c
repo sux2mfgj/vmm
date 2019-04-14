@@ -259,6 +259,7 @@ static int vcpu_set_kvm_regs(struct vcpu *vcpu, struct kvm_regs *regs)
 
 static int update_vmcs_guest_state_area(struct vcpu* vcpu)
 {
+    uint32_t msr_low, msr_high;
     vmcs_write(GUEST_CR0, vcpu->sregs.cr0);
     vmcs_write(GUEST_CR3, vcpu->sregs.cr3);
     vmcs_write(GUEST_CR4, vcpu->sregs.cr4);
@@ -291,12 +292,39 @@ static int update_vmcs_guest_state_area(struct vcpu* vcpu)
 
     //TODO is it correct?
     vmcs_write(HOST_CR0, read_cr0());
-//     vmcs_write(HOST_CR3, read_cr3());
-    vmcs_write(HOST_CR4, read_cr4());
-//     mcs_write(GUEST_IA32_DEBUGCTL_FULL, 0);
-//     vmcs_write(GUEST_IA32_SYSENTER_CS, 0);
-//     vmcs_write(GUEST_IA32_SYSENTER_ESP, 0);
-//     vmcs_write(GUEST_IA32_SYSENTER_EIP, 0);
+    vmcs_write(HOST_CR3, __read_cr3());
+    vmcs_write(HOST_CR4, __read_cr4());
+
+    rdmsr(MSR_IA32_DEBUGCTLMSR, msr_low, msr_high);
+    vmcs_write(GUEST_IA32_DEBUGCTL_FULL, (uint64_t)msr_high << 32 | msr_low);
+
+    vmcs_write(TSC_OFFSET_FULL, 0);
+    vmcs_write(PAGE_FAULT_ERROR_CODE_MASK, 0);
+    vmcs_write(PAGE_FAULT_ERROR_CODE_MATCH, 0);
+
+    vmcs_write(VM_EXIT_MSR_STORE_COUNT, 0);
+    vmcs_write(VM_EXIT_MSR_LOAD_COUNT, 0);
+
+    vmcs_write(VM_ENTRY_MSR_LOAD_COUNT, 0);
+    vmcs_write(VM_ENTRY_INTERRUPTION_INFO_FIELD, 0);
+
+    vmcs_write(GUEST_INTERRUPTIBILITY_STATE, 0);
+    vmcs_write(GUEST_ACTIVITY_STATE, 0);
+
+//     vmcs_write(PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS, );
+//     vmcs_write(PIN_BASED_VM_EXEC_CONTROLS, );
+//     vmcs_write(SECONDARY_PROCESSOR_BASED_VM_EXEC_CONTROL, );
+
+//     vmcs_write(VM_EXIT_CONTROLS, );
+//     vmcs_write(VM_ENTRY_CONTROLS, );
+
+    vmcs_write(CR3_TARGET_COUNT, 0);
+    vmcs_write(CR3_TARGET_VALUE_0, 0);
+    vmcs_write(CR3_TARGET_VALUE_1, 0);
+    vmcs_write(CR3_TARGET_VALUE_2, 0);
+    vmcs_write(CR3_TARGET_VALUE_3, 0);
+
+//     vmcs_write(MSR_BITMAPS_FULL, );
 
     //TODO setup MSRs
 
