@@ -7,7 +7,6 @@
 
 #include "vmx.h"
 #include "config.h"
-#include "amd64_asm.h"
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Shunsuke Mie <sux2mfgj@gmail.com>");
@@ -228,7 +227,7 @@ static int vcpu_get_kvm_sregs(struct vcpu *vcpu, struct kvm_sregs *sregs)
 	sregs->cr4 = vmcs_read(GUEST_CR4);
 	sregs->cr8 = vcpu->sregs.cr8;
 
-    //TODO
+	//TODO
 	//sregs->efer = vcpu->arch.efer;
 	//sregs->apic_base = vcpu->arch.apic_base;
 
@@ -245,31 +244,30 @@ static int vcpu_get_kvm_sregs(struct vcpu *vcpu, struct kvm_sregs *sregs)
 
 static int vcpu_set_kvm_sregs(struct vcpu *vcpu, struct kvm_sregs *sregs)
 {
-    memcpy(&vcpu->sregs, sregs, sizeof(struct kvm_sregs));
+	memcpy(&vcpu->sregs, sregs, sizeof(struct kvm_sregs));
 	return 0;
 }
 
 static int vcpu_set_kvm_regs(struct vcpu *vcpu, struct kvm_regs *regs)
 {
-    memcpy(&vcpu->regs, regs, sizeof(struct kvm_regs));
+	memcpy(&vcpu->regs, regs, sizeof(struct kvm_regs));
 	return 0;
 }
 
-
-
-static int update_vmcs_guest_state_area(struct vcpu* vcpu)
+static int update_vmcs_guest_state_area(struct vcpu *vcpu)
 {
-    uint32_t msr_low, msr_high;
-    vmcs_write(GUEST_CR0, vcpu->sregs.cr0);
-    vmcs_write(GUEST_CR3, vcpu->sregs.cr3);
-    vmcs_write(GUEST_CR4, vcpu->sregs.cr4);
+	uint32_t msr_low, msr_high;
 
-    vmcs_write(GUEST_DR7, vcpu->debug_regs.dr7);
-    vmcs_write(GUEST_RIP, vcpu->regs.rip);
-    vmcs_write(GUEST_RSP, vcpu->regs.rsp);
-    vmcs_write(GUEST_RFLAGS, vcpu->regs.rflags);
+	vmcs_write(GUEST_CR0, vcpu->sregs.cr0);
+	vmcs_write(GUEST_CR3, vcpu->sregs.cr3);
+	vmcs_write(GUEST_CR4, vcpu->sregs.cr4);
 
-    vmx_set_segment(&vcpu->sregs.cs, GUEST_CS_BASE, GUEST_CS_LIMIT,
+	vmcs_write(GUEST_DR7, vcpu->debug_regs.dr7);
+	vmcs_write(GUEST_RIP, vcpu->regs.rip);
+	vmcs_write(GUEST_RSP, vcpu->regs.rsp);
+	vmcs_write(GUEST_RFLAGS, vcpu->regs.rflags);
+
+	vmx_set_segment(&vcpu->sregs.cs, GUEST_CS_BASE, GUEST_CS_LIMIT,
 			GUEST_CS_SELECTOR, GUEST_CS_ACCESS_RIGHTS);
 	vmx_set_segment(&vcpu->sregs.ss, GUEST_SS_BASE, GUEST_SS_LIMIT,
 			GUEST_SS_SELECTOR, GUEST_SS_ACCESS_RIGHTS);
@@ -290,71 +288,120 @@ static int update_vmcs_guest_state_area(struct vcpu* vcpu)
 	vmx_set_desc_table(&vcpu->sregs.idt, GUEST_IDTR_BASE, GUEST_IDTR_LIMIT);
 	vmx_set_desc_table(&vcpu->sregs.gdt, GUEST_GDTR_BASE, GUEST_GDTR_LIMIT);
 
-    //TODO is it correct?
-    vmcs_write(HOST_CR0, read_cr0());
-    vmcs_write(HOST_CR3, __read_cr3());
-    vmcs_write(HOST_CR4, __read_cr4());
+	//TODO is it correct?
 
-    rdmsr(MSR_IA32_DEBUGCTLMSR, msr_low, msr_high);
-    vmcs_write(GUEST_IA32_DEBUGCTL_FULL, (uint64_t)msr_high << 32 | msr_low);
+	rdmsr(MSR_IA32_DEBUGCTLMSR, msr_low, msr_high);
+	vmcs_write(GUEST_IA32_DEBUGCTL_FULL,
+		   (uint64_t)msr_high << 32 | msr_low);
 
-    vmcs_write(TSC_OFFSET_FULL, 0);
-    vmcs_write(PAGE_FAULT_ERROR_CODE_MASK, 0);
-    vmcs_write(PAGE_FAULT_ERROR_CODE_MATCH, 0);
+	vmcs_write(TSC_OFFSET_FULL, 0);
+	vmcs_write(PAGE_FAULT_ERROR_CODE_MASK, 0);
+	vmcs_write(PAGE_FAULT_ERROR_CODE_MATCH, 0);
 
-    vmcs_write(VM_EXIT_MSR_STORE_COUNT, 0);
-    vmcs_write(VM_EXIT_MSR_LOAD_COUNT, 0);
+	vmcs_write(VM_EXIT_MSR_STORE_COUNT, 0);
+	vmcs_write(VM_EXIT_MSR_LOAD_COUNT, 0);
 
-    vmcs_write(VM_ENTRY_MSR_LOAD_COUNT, 0);
-    vmcs_write(VM_ENTRY_INTERRUPTION_INFO_FIELD, 0);
+	vmcs_write(VM_ENTRY_MSR_LOAD_COUNT, 0);
+	vmcs_write(VM_ENTRY_INTERRUPTION_INFO_FIELD, 0);
 
-    vmcs_write(GUEST_INTERRUPTIBILITY_STATE, 0);
-    vmcs_write(GUEST_ACTIVITY_STATE, 0);
+	vmcs_write(GUEST_INTERRUPTIBILITY_STATE, 0);
+	vmcs_write(GUEST_ACTIVITY_STATE, 0);
 
-//     vmcs_write(PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS, );
-//     vmcs_write(PIN_BASED_VM_EXEC_CONTROLS, );
-//     vmcs_write(SECONDARY_PROCESSOR_BASED_VM_EXEC_CONTROL, );
+	//     vmcs_write(PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS, );
+	//     vmcs_write(PIN_BASED_VM_EXEC_CONTROLS, );
+	//     vmcs_write(SECONDARY_PROCESSOR_BASED_VM_EXEC_CONTROL, );
 
-//     vmcs_write(VM_EXIT_CONTROLS, );
-//     vmcs_write(VM_ENTRY_CONTROLS, );
+	//     vmcs_write(VM_EXIT_CONTROLS, );
+	//     vmcs_write(VM_ENTRY_CONTROLS, );
 
-    vmcs_write(CR3_TARGET_COUNT, 0);
-    vmcs_write(CR3_TARGET_VALUE_0, 0);
-    vmcs_write(CR3_TARGET_VALUE_1, 0);
-    vmcs_write(CR3_TARGET_VALUE_2, 0);
-    vmcs_write(CR3_TARGET_VALUE_3, 0);
+	vmcs_write(CR3_TARGET_COUNT, 0);
+	vmcs_write(CR3_TARGET_VALUE_0, 0);
+	vmcs_write(CR3_TARGET_VALUE_1, 0);
+	vmcs_write(CR3_TARGET_VALUE_2, 0);
+	vmcs_write(CR3_TARGET_VALUE_3, 0);
 
-//     vmcs_write(MSR_BITMAPS_FULL, );
+	//     vmcs_write(MSR_BITMAPS_FULL, );
 
-    //TODO setup MSRs
+	//TODO setup MSRs
 
-    return -EINVAL;
+	return -EINVAL;
+}
+
+static int update_vmcs_host_state_area(struct vcpu *vcpu)
+{
+	struct desc_ptr dt;
+	uint32_t msr_tmp_low, msr_tmp_high;
+	void *gdt;
+
+	vmcs_write(HOST_CR0, read_cr0());
+	vmcs_write(HOST_CR3, __read_cr3());
+	vmcs_write(HOST_CR4, __read_cr4());
+
+	vmcs_write(HOST_CS_SELECTOR, __KERNEL_CS);
+	vmcs_write(HOST_DS_SELECTOR, 0);
+	vmcs_write(HOST_ES_SELECTOR, 0);
+
+	vmcs_write(HOST_SS_SELECTOR, __KERNEL_DS);
+	vmcs_write(HOST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
+
+	store_idt(&dt);
+	vmcs_write(HOST_IDTR_BASE, dt.address);
+
+	// TODO
+	//vmcs_write(HOST_RIP, );
+
+	rdmsr(MSR_IA32_SYSENTER_CS, msr_tmp_low, msr_tmp_high);
+	vmcs_write(HOST_IA32_SYSENTER_CS,
+		   (uint64_t)msr_tmp_high << 32 | msr_tmp_low);
+
+	rdmsr(MSR_IA32_SYSENTER_EIP, msr_tmp_low, msr_tmp_high);
+	vmcs_write(HOST_IA32_SYSENTER_EIP,
+		   (uint64_t)msr_tmp_high << 32 | msr_tmp_low);
+
+	rdmsr(MSR_IA32_SYSENTER_ESP, msr_tmp_low, msr_tmp_high);
+	vmcs_write(HOST_IA32_SYSENTER_ESP,
+		   (uint64_t)msr_tmp_high << 32 | msr_tmp_low);
+
+	gdt = get_current_gdt_ro();
+	vmcs_write(HOST_GDTR_BASE, (unsigned long)gdt);
+
+	rdmsr(MSR_EFER, msr_tmp_low, msr_tmp_high);
+	vmcs_write(HOST_IA32_EFER_FULL,
+		   (uint64_t)msr_tmp_high << 32 | msr_tmp_low);
+
+	return -EINVAL;
 }
 
 static int vcpu_enter_guest(struct vcpu *vcpu)
 {
-    int r = -EINVAL;;
-    r = update_vmcs_guest_state_area(vcpu);
-    //TODO
-    return r;
+	int r = -EINVAL;
+	;
+	r = update_vmcs_guest_state_area(vcpu);
+	if (r) {
+		// TODO
+	}
+
+	r = update_vmcs_host_state_area(vcpu);
+	if (r) {
+		// TODO
+	}
+
+	// TODO
+	return r;
 }
 
-static int vcpu_kvm_run(struct vcpu* vcpu)
+static int vcpu_kvm_run(struct vcpu *vcpu)
 {
-    int r = -EINVAL;
-    while(true)
-    {
-        if(vcpu->mp_state == MP_RUNNABLE)
-        {
-            r = vcpu_enter_guest(vcpu);
-        }
-        else
-        {
-            return -EINVAL;
-        }
-    }
+	int r = -EINVAL;
+	while (true) {
+		if (vcpu->mp_state == MP_RUNNABLE) {
+			r = vcpu_enter_guest(vcpu);
+		} else {
+			return -EINVAL;
+		}
+	}
 
-    return r;
+	return r;
 }
 
 static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
@@ -420,12 +467,11 @@ static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 	}
 	case KVM_RUN: {
 		printk("vmm: kvm_run\n");
-        r = vcpu_kvm_run(vcpu);
-        if(r)
-        {
-            printk("vmm: failed run the vcpu(%d)\n", vcpu->id);
-            break;
-        }
+		r = vcpu_kvm_run(vcpu);
+		if (r) {
+			printk("vmm: failed run the vcpu(%d)\n", vcpu->id);
+			break;
+		}
 
 		break;
 	}
@@ -485,20 +531,19 @@ static long vmm_vm_ioctl_create_vcpu(struct vm *vm, unsigned int id)
 		return -EFAULT;
 	}
 
-    // all of registers and states of the processor are zero.
+	// all of registers and states of the processor are zero.
 	vcpu = kvmalloc(sizeof(struct vcpu), GFP_KERNEL | __GFP_ZERO);
 	// TODO use the virtual processor identifire (VPID) to increase speed.
 	vcpu->vpid = 0;
 	vcpu->id = id;
 
-    if(id == 0) // this vcpu is BSP (bootstrap processor).
-    {
-        vcpu->mp_state = MP_RUNNABLE;
-    }
-    else    // others are AP.
-    {
-        vcpu->mp_state = MP_UNINITIALIZED;
-    }
+	if (id == 0) // this vcpu is BSP (bootstrap processor).
+	{
+		vcpu->mp_state = MP_RUNNABLE;
+	} else // others are AP.
+	{
+		vcpu->mp_state = MP_UNINITIALIZED;
+	}
 
 	page = alloc_page(GFP_KERNEL | __GFP_ZERO);
 	if (!page) {
