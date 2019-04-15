@@ -406,7 +406,7 @@ static int vcpu_enter_guest(struct vcpu *vcpu)
     r = vm_enter_guest(&vcpu->regs, vcpu->is_launch);
     if(r)
     {
-        printk("error occured at vm_entery_guest\n");
+        printk("error occured at vm_entery_guest [%d]\n", r);
         r = -EINVAL;
         goto error;
     }

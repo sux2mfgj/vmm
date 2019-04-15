@@ -1,6 +1,13 @@
 
 #define SAVE_HOST_REGS \
     movq %r15, 15 * 8 (%rdi)
+    movq %r14, 14 * 8 (%rdi)
+    movq %r13, 13 * 8 (%rdi)
+    movq %r12, 13 * 8 (%rdi)
+    movq %rbp, 7 * 8 (%rdi)
+    movq %rsp, 6 * 8 (%rdi)
+    movq %rbx, 1 * 8 (%rdi)
+
 
 #define LOAD_HOST_REGS \
     movq 15*8(%rdi), %r15
@@ -17,7 +24,7 @@ vm_enter_guest:
     SAVE_HOST_REGS
 
     movl %esi, %r8d
-    cmpl $0, %r8d
+    cmpl $1, %r8d
     je exec_vmresume
     vmlaunch
 
@@ -28,9 +35,10 @@ vm_enter_guest:
 exec_vmresume:
     // when some error occured at the vmresume, the ret is executed.
     vmresume
+    movl $2, %eax
     ret
 /*
- * void vm_exit_guest(?);
+ * void vm_exit_guest(?); // TODO
  */
 .globl vm_exit_guest
 vm_exit_guest:
