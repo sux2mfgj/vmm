@@ -1,5 +1,5 @@
 obj-m += vmm.o
-vmm-objs := main.o vmx.o
+vmm-objs := main.o vmx.o vmx_asm.o
 
 BUILD_PATH	:= /lib/modules/$(shell uname -r)/build
 

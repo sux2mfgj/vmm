@@ -7,6 +7,7 @@
 
 #include "vmx.h"
 #include "config.h"
+#include "vmx_asm.h"
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Shunsuke Mie <sux2mfgj@gmail.com>");
@@ -288,43 +289,11 @@ static int update_vmcs_guest_state_area(struct vcpu *vcpu)
 	vmx_set_desc_table(&vcpu->sregs.idt, GUEST_IDTR_BASE, GUEST_IDTR_LIMIT);
 	vmx_set_desc_table(&vcpu->sregs.gdt, GUEST_GDTR_BASE, GUEST_GDTR_LIMIT);
 
-	//TODO is it correct?
-
 	rdmsr(MSR_IA32_DEBUGCTLMSR, msr_low, msr_high);
 	vmcs_write(GUEST_IA32_DEBUGCTL_FULL,
 		   (uint64_t)msr_high << 32 | msr_low);
 
-	vmcs_write(TSC_OFFSET_FULL, 0);
-	vmcs_write(PAGE_FAULT_ERROR_CODE_MASK, 0);
-	vmcs_write(PAGE_FAULT_ERROR_CODE_MATCH, 0);
-
-	vmcs_write(VM_EXIT_MSR_STORE_COUNT, 0);
-	vmcs_write(VM_EXIT_MSR_LOAD_COUNT, 0);
-
-	vmcs_write(VM_ENTRY_MSR_LOAD_COUNT, 0);
-	vmcs_write(VM_ENTRY_INTERRUPTION_INFO_FIELD, 0);
-
-	vmcs_write(GUEST_INTERRUPTIBILITY_STATE, 0);
-	vmcs_write(GUEST_ACTIVITY_STATE, 0);
-
-	//     vmcs_write(PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS, );
-	//     vmcs_write(PIN_BASED_VM_EXEC_CONTROLS, );
-	//     vmcs_write(SECONDARY_PROCESSOR_BASED_VM_EXEC_CONTROL, );
-
-	//     vmcs_write(VM_EXIT_CONTROLS, );
-	//     vmcs_write(VM_ENTRY_CONTROLS, );
-
-	vmcs_write(CR3_TARGET_COUNT, 0);
-	vmcs_write(CR3_TARGET_VALUE_0, 0);
-	vmcs_write(CR3_TARGET_VALUE_1, 0);
-	vmcs_write(CR3_TARGET_VALUE_2, 0);
-	vmcs_write(CR3_TARGET_VALUE_3, 0);
-
-	//     vmcs_write(MSR_BITMAPS_FULL, );
-
-	//TODO setup MSRs
-
-	return -EINVAL;
+	return 0;
 }
 
 static int update_vmcs_host_state_area(struct vcpu *vcpu)
@@ -348,7 +317,8 @@ static int update_vmcs_host_state_area(struct vcpu *vcpu)
 	vmcs_write(HOST_IDTR_BASE, dt.address);
 
 	// TODO
-	//vmcs_write(HOST_RIP, );
+	vmcs_write(HOST_RIP, (unsigned long)vm_exit_guest);
+    //vmcs_write(HOST_RSP, );
 
 	rdmsr(MSR_IA32_SYSENTER_CS, msr_tmp_low, msr_tmp_high);
 	vmcs_write(HOST_IA32_SYSENTER_CS,
@@ -369,13 +339,55 @@ static int update_vmcs_host_state_area(struct vcpu *vcpu)
 	vmcs_write(HOST_IA32_EFER_FULL,
 		   (uint64_t)msr_tmp_high << 32 | msr_tmp_low);
 
-	return -EINVAL;
+	return 0;
+}
+
+static int update_vmcs_other_area(struct vcpu *vcpu)
+{
+	vmcs_write(VMCS_LINK_POINTER_FULL, 0xffffffffffffffffULL);
+
+	vmcs_write(TSC_OFFSET_FULL, 0);
+
+	vmcs_write(PAGE_FAULT_ERROR_CODE_MASK, 0);
+	vmcs_write(PAGE_FAULT_ERROR_CODE_MATCH, 0);
+
+	vmcs_write(VM_EXIT_MSR_STORE_COUNT, 0);
+	vmcs_write(VM_EXIT_MSR_LOAD_COUNT, 0);
+
+	vmcs_write(VM_ENTRY_MSR_LOAD_COUNT, 0);
+	vmcs_write(VM_ENTRY_INTERRUPTION_INFO_FIELD, 0);
+
+	vmcs_write(GUEST_INTERRUPTIBILITY_STATE, 0);
+	vmcs_write(GUEST_ACTIVITY_STATE, 0);
+
+	// TODO
+	vmcs_write(PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS,
+		   CPU_BASED_EXEC_ACTIVE_SECONDARY_CTRLS);
+
+	vmcs_write(SECONDARY_PROCESSOR_BASED_VM_EXEC_CONTROL, 0);
+
+	vmcs_write(PIN_BASED_VM_EXEC_CONTROLS, 0);
+
+	vmcs_write(VM_EXIT_CONTROLS, 0);
+
+	vmcs_write(VM_ENTRY_CONTROLS, 0);
+
+	vmcs_write(CR3_TARGET_COUNT, 0);
+	vmcs_write(CR3_TARGET_VALUE_0, 0);
+	vmcs_write(CR3_TARGET_VALUE_1, 0);
+	vmcs_write(CR3_TARGET_VALUE_2, 0);
+	vmcs_write(CR3_TARGET_VALUE_3, 0);
+
+    vmcs_write(MSR_BITMAPS_FULL, 0);
+	return 0;
 }
 
 static int vcpu_enter_guest(struct vcpu *vcpu)
 {
 	int r = -EINVAL;
-	;
+    /*
+     * setup vmcs area for the guest VM.
+     */
 	r = update_vmcs_guest_state_area(vcpu);
 	if (r) {
 		// TODO
@@ -386,6 +398,20 @@ static int vcpu_enter_guest(struct vcpu *vcpu)
 		// TODO
 	}
 
+	r = update_vmcs_other_area(vcpu);
+	if (r) {
+		// TODO
+	}
+
+    r = vm_enter_guest(&vcpu->regs, vcpu->is_launch);
+    if(r)
+    {
+        printk("error occured at vm_entery_guest\n");
+        r = -EINVAL;
+        goto error;
+    }
+
+error:
 	// TODO
 	return r;
 }
@@ -396,6 +422,8 @@ static int vcpu_kvm_run(struct vcpu *vcpu)
 	while (true) {
 		if (vcpu->mp_state == MP_RUNNABLE) {
 			r = vcpu_enter_guest(vcpu);
+            //TODO check the return code
+            break;
 		} else {
 			return -EINVAL;
 		}
@@ -551,6 +579,7 @@ static long vmm_vm_ioctl_create_vcpu(struct vm *vm, unsigned int id)
 		goto failed_create_vcpu;
 	}
 	vcpu->run = page_address(page);
+    vcpu->is_launch = 0;
 
 	vm->vcpus[id] = vcpu;
 

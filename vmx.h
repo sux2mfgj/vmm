@@ -367,6 +367,8 @@ struct vcpu {
 	struct kvm_debugregs debug_regs;
 	enum mp_state mp_state;
 	uint32_t smbase;
+
+    int is_launch;
 };
 
 struct vm {
