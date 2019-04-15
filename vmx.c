@@ -318,7 +318,7 @@ static int update_vmcs_host_state_area(struct vcpu *vcpu)
 
 	// TODO
 	vmcs_write(HOST_RIP, (unsigned long)vm_exit_guest);
-    //vmcs_write(HOST_RSP, );
+	//vmcs_write(HOST_RSP, );
 
 	rdmsr(MSR_IA32_SYSENTER_CS, msr_tmp_low, msr_tmp_high);
 	vmcs_write(HOST_IA32_SYSENTER_CS,
@@ -378,14 +378,14 @@ static int update_vmcs_other_area(struct vcpu *vcpu)
 	vmcs_write(CR3_TARGET_VALUE_2, 0);
 	vmcs_write(CR3_TARGET_VALUE_3, 0);
 
-    vmcs_write(MSR_BITMAPS_FULL, 0);
+	vmcs_write(MSR_BITMAPS_FULL, 0);
 	return 0;
 }
 
 static int vcpu_enter_guest(struct vcpu *vcpu)
 {
 	int r = -EINVAL;
-    /*
+	/*
      * setup vmcs area for the guest VM.
      */
 	r = update_vmcs_guest_state_area(vcpu);
@@ -403,13 +403,12 @@ static int vcpu_enter_guest(struct vcpu *vcpu)
 		// TODO
 	}
 
-    r = vm_enter_guest(&vcpu->regs, vcpu->is_launch);
-    if(r)
-    {
-        printk("error occured at vm_entery_guest [%d]\n", r);
-        r = -EINVAL;
-        goto error;
-    }
+	r = vm_enter_guest(&vcpu->regs, vcpu->is_launch);
+	if (r) {
+		printk("error occured at vm_entery_guest [%d]\n", r);
+		r = -EINVAL;
+		goto error;
+	}
 
 error:
 	// TODO
@@ -422,8 +421,8 @@ static int vcpu_kvm_run(struct vcpu *vcpu)
 	while (true) {
 		if (vcpu->mp_state == MP_RUNNABLE) {
 			r = vcpu_enter_guest(vcpu);
-            //TODO check the return code
-            break;
+			//TODO check the return code
+			break;
 		} else {
 			return -EINVAL;
 		}
@@ -579,7 +578,9 @@ static long vmm_vm_ioctl_create_vcpu(struct vm *vm, unsigned int id)
 		goto failed_create_vcpu;
 	}
 	vcpu->run = page_address(page);
-    vcpu->is_launch = 0;
+	// TODO
+	// when the values is updated? vmexit?
+	vcpu->is_launch = 0;
 
 	vm->vcpus[id] = vcpu;
 

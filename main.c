@@ -25,12 +25,12 @@ static long vmm_dev_ioctl(struct file *filep, unsigned int ioctl,
 		break;
 	case KVM_CREATE_VM:
 		r = vmm_dev_ioctl_create_vm(arg);
-                break;
-        case KVM_GET_VCPU_MMAP_SIZE:
-                // a pointer of the struct kvm_run is alined page and the size
-                // is less than one page (4k).
-                r = PAGE_SIZE;
-                break;
+		break;
+	case KVM_GET_VCPU_MMAP_SIZE:
+		// a pointer of the struct kvm_run is alined page and the size
+		// is less than one page (4k).
+		r = PAGE_SIZE;
+		break;
 	default:
 		break;
 	}
