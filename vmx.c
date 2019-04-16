@@ -379,6 +379,9 @@ static int update_vmcs_other_area(struct vcpu *vcpu)
 	vmcs_write(CR3_TARGET_VALUE_3, 0);
 
 	vmcs_write(MSR_BITMAPS_FULL, 0);
+	// TODO
+	// setup EPTP
+	// flag unristricted mode
 	return 0;
 }
 
