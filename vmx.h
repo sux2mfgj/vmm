@@ -361,10 +361,10 @@ struct vcpu {
 	unsigned int vpid;
 	unsigned int id;
 	struct kvm_run *run;
-
 	struct kvm_regs regs;
 	struct kvm_sregs sregs;
 	struct kvm_debugregs debug_regs;
+    u64 eptp;
 	enum mp_state mp_state;
 	uint32_t smbase;
 

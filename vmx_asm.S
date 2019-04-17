@@ -23,9 +23,11 @@
 vm_enter_guest:
     SAVE_HOST_REGS
 
-    movl %esi, %r8d
+    movl (%esi), %r8d
     cmpl $1, %r8d
     je exec_vmresume
+    // disable the is_launch
+    movl $0, (%esi)
     vmlaunch
 
     // when some error occured at the vmlaunch, the ret is executed.

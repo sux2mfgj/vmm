@@ -364,13 +364,14 @@ static int update_vmcs_other_area(struct vcpu *vcpu)
 	vmcs_write(PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS,
 		   CPU_BASED_EXEC_ACTIVE_SECONDARY_CTRLS);
 
-	vmcs_write(SECONDARY_PROCESSOR_BASED_VM_EXEC_CONTROL, 0);
+	vmcs_write(SECONDARY_PROCESSOR_BASED_VM_EXEC_CONTROL,
+		   SECOND_EXEC_ENABLE_EPT | SECOND_EXEC_UNRISTRICTED_GUEST);
 
 	vmcs_write(PIN_BASED_VM_EXEC_CONTROLS, 0);
 
-	vmcs_write(VM_EXIT_CONTROLS, 0);
+	vmcs_write(VM_EXIT_CONTROLS, VM_EXIT_CTRL_SAVE_IA32_EFER);
 
-	vmcs_write(VM_ENTRY_CONTROLS, 0);
+	vmcs_write(VM_ENTRY_CONTROLS, VM_ENTRY_CTRL_LOAD_IA32_EFER);
 
 	vmcs_write(CR3_TARGET_COUNT, 0);
 	vmcs_write(CR3_TARGET_VALUE_0, 0);
@@ -379,9 +380,9 @@ static int update_vmcs_other_area(struct vcpu *vcpu)
 	vmcs_write(CR3_TARGET_VALUE_3, 0);
 
 	vmcs_write(MSR_BITMAPS_FULL, 0);
-	// TODO
-	// setup EPTP
-	// flag unristricted mode
+
+	vmcs_write(EPT_POINTER_FULL, vcpu->eptp);
+
 	return 0;
 }
 
@@ -406,7 +407,7 @@ static int vcpu_enter_guest(struct vcpu *vcpu)
 		// TODO
 	}
 
-	r = vm_enter_guest(&vcpu->regs, vcpu->is_launch);
+	r = vm_enter_guest(&vcpu->regs, &vcpu->is_launch);
 	if (r) {
 		printk("error occured at vm_entery_guest [%d]\n", r);
 		r = -EINVAL;
@@ -584,6 +585,7 @@ static long vmm_vm_ioctl_create_vcpu(struct vm *vm, unsigned int id)
 	// TODO
 	// when the values is updated? vmexit?
 	vcpu->is_launch = 0;
+	vcpu->eptp = INVALID_PAGE;
 
 	vm->vcpus[id] = vcpu;
 
