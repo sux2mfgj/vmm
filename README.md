@@ -11,3 +11,6 @@
 
 ##### current status (notice)
 This project is work in progress. (vmm cannot boot any guest OS and run programs as a guest.)
+
+##### preparaton to start development
+see a [DEVELOPPER.md](./DEVELOPPER.md)
