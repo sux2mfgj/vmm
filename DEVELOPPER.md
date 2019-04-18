@@ -1,5 +1,16 @@
 simple docs for developpers
 ---
+I'm developping vmm as nested vmm. A below figure shows that.
+```
++--------------------+
+|+------------------+|
+||some code as guest||
+||    Linux + vmm   ||
+|+------------------+|
+|       Qemu         |
+|  Host Linux + KVM  |
++--------------------+
+```
 
 1. install qemu-kvm and setup user
 ```
@@ -34,6 +45,7 @@ $ virt-install \
         --graphics spice,listen=0.0.0.0 \
         --os-type-linux
 $ # follow the installer and shutdown
+$ # Maybe, you have to change a configuration to use nested vmm of the qemu-kvm
 ```
 
 1. boot the guest os
@@ -46,3 +58,9 @@ $ virsh start dev_vmm_arch
 TBD
 
 1. let's start hacking!
+
+#### Notice
+Please uninstall a kvm_intel module from guest linux. like,
+```
+$ modprove -r kvm_instal
+```

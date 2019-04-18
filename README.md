@@ -1,16 +1,17 @@
 # vmm
 
 ##### purpose of this project
-- design simple vmm
+- design of a simple vmm
     - small code and single guest os.
 
-- learn linux kernel and kernel module. (for beginners, like me)
+- learning linux kernel and kernel module. (for beginners, like me)
 
-- use hardware acceleration
+- using hardware acceleration
     - Intel VMX and EPT
 
 ##### current status (notice)
-This project is work in progress. (vmm cannot boot any guest OS and run programs as a guest.)
+This project is work in progress. (the vmm cannot boot any guest OS and run programs as a guest.)
 
-##### preparaton to start development
-see a [DEVELOPPER.md](./DEVELOPPER.md)
+##### how to build and run this vmm
+see a [DEVELOPPER.md](./DEVELOPPER.md)  
+wellcome any patches and issues!!
