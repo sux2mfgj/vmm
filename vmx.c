@@ -318,7 +318,7 @@ static int update_vmcs_host_state_area(struct vcpu *vcpu)
 
 	// TODO
 	vmcs_write(HOST_RIP, (unsigned long)vm_exit_guest);
-	//vmcs_write(HOST_RSP, );
+	vmcs_write(HOST_RSP, 0);
 
 	rdmsr(MSR_IA32_SYSENTER_CS, msr_tmp_low, msr_tmp_high);
 	vmcs_write(HOST_IA32_SYSENTER_CS,
