@@ -10,8 +10,12 @@
     - Intel VMX and EPT
 
 ##### current status (notice)
-This project is work in progress. (the vmm cannot boot any guest OS and run programs as a guest.)
+This project is working in progress. (the vmm cannot boot any guest OS and run programs as a guest.)
 
-##### how to build and run this vmm
-see a [DEVELOPPER.md](./DEVELOPPER.md)  
+##### for users
+TBD
+
+##### for developpers
+see a [DEVELOPPERS.md](./DEVELOPPERS.md) and [DEBUG.md](./DEBUG.md).  
 wellcome any patches and issues!!
+
