@@ -9,6 +9,7 @@ build:
 
 .PHONY: install
 install: build
+	./check_and_uninstall.sh
 	sudo insmod vmm.ko
 
 .PHONY: uninstall
