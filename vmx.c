@@ -4,6 +4,7 @@
 #include <linux/mm.h>
 #include <linux/anon_inodes.h>
 #include <linux/uaccess.h>
+#include <linux/version.h>
 
 #include "vmx.h"
 #include "config.h"
@@ -518,7 +519,11 @@ static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 	return r;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+static int vmm_vcpu_page_fault(struct vm_fault *vmf)
+#else
 static vm_fault_t vmm_vcpu_page_fault(struct vm_fault *vmf)
+#endif
 {
 	struct vcpu *vcpu = vmf->vma->vm_file->private_data;
 	struct page *page;
