@@ -245,12 +245,14 @@ static int vcpu_get_kvm_sregs(struct vcpu *vcpu, struct kvm_sregs *sregs)
 
 static int vcpu_set_kvm_sregs(struct vcpu *vcpu, struct kvm_sregs *sregs)
 {
+	//memcpy(sregs, &vcpu->sregs, sizeof(struct kvm_sregs));
 	memcpy(&vcpu->sregs, sregs, sizeof(struct kvm_sregs));
 	return 0;
 }
 
 static int vcpu_set_kvm_regs(struct vcpu *vcpu, struct kvm_regs *regs)
 {
+	//memcpy(regs, &vcpu->regs, sizeof(struct kvm_regs));
 	memcpy(&vcpu->regs, regs, sizeof(struct kvm_regs));
 	return 0;
 }
@@ -365,7 +367,8 @@ static int update_vmcs_other_area(struct vcpu *vcpu)
 		   CPU_BASED_EXEC_ACTIVE_SECONDARY_CTRLS);
 
 	vmcs_write(SECONDARY_PROCESSOR_BASED_VM_EXEC_CONTROL,
-		   SECOND_EXEC_ENABLE_EPT | SECOND_EXEC_UNRISTRICTED_GUEST);
+		   SECOND_EXEC_ENABLE_EPT | SECOND_EXEC_UNRISTRICTED_GUEST |
+			   SECOND_EXEC_EPT_VIOLTION);
 
 	vmcs_write(PIN_BASED_VM_EXEC_CONTROLS, 0);
 
@@ -416,7 +419,7 @@ static int vcpu_enter_guest(struct vcpu *vcpu)
 
 error:
 	// TODO
-	return r;
+	return -EINVAL;
 }
 
 static int vcpu_kvm_run(struct vcpu *vcpu)
@@ -455,7 +458,7 @@ static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 			r = -EINVAL;
 			break;
 		}
-		r = copy_to_user(argp, &kvm_sregs, sizeof(struct kvm_sregs));
+		r = copy_to_user(argp, &kvm_sregs, sizeof(kvm_sregs));
 		if (r) {
 			printk("vmm: failed copy_to_user\n");
 			r = -EINVAL;
@@ -465,7 +468,7 @@ static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 	}
 	case KVM_SET_SREGS: {
 		printk("vmm: KVM_SET_SREGS\n");
-		r = copy_from_user(&kvm_sregs, argp, sizeof(struct kvm_sregs));
+		r = copy_from_user(&kvm_sregs, argp, sizeof(kvm_sregs));
 		if (r) {
 			printk("vmm: failed copy kvm_sregs from user\n");
 			r = -EINVAL;
@@ -480,9 +483,9 @@ static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 		break;
 	}
 	case KVM_SET_REGS: {
-		printk("vmm: KVM_SET_RES\n");
+		printk("vmm: KVM_SET_REGS\n");
 
-		r = copy_from_user(&kvm_regs, argp, sizeof(struct kvm_regs));
+		r = copy_from_user(&kvm_regs, argp, sizeof(kvm_regs));
 		if (r) {
 			printk("vmm: failed copy the kvm_regs from userspace\n");
 			r = EINVAL;
@@ -497,7 +500,7 @@ static long vmm_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 		break;
 	}
 	case KVM_RUN: {
-		printk("vmm: kvm_run\n");
+		printk("vmm: KVM_RUN\n");
 		r = vcpu_kvm_run(vcpu);
 		if (r) {
 			printk("vmm: failed run the vcpu(%d)\n", vcpu->id);
@@ -606,6 +609,7 @@ static long vmm_vm_ioctl(struct file *filep, unsigned int ioctl,
 			 unsigned long arg)
 {
 	struct vm *vm = filep->private_data;
+	void __user *argp = (void __user *)arg;
 	long r = -EFAULT;
 
 	switch (ioctl) {
@@ -615,8 +619,16 @@ static long vmm_vm_ioctl(struct file *filep, unsigned int ioctl,
 		break;
 	}
 	case KVM_SET_USER_MEMORY_REGION: {
-		//TODO
-		r = 0;
+		struct kvm_userspace_memory_region kvm_userspace_mem;
+
+		r = copy_from_user(&kvm_userspace_mem, argp,
+				   sizeof(kvm_userspace_mem));
+        if(r)
+        {
+            r = -EINVAL;
+            break;
+        }
+		// TODO save the kvm_userspace_mem to the vcpu
 		break;
 	}
 	case KVM_CREATE_VCPU: {
@@ -647,8 +659,8 @@ long vmm_dev_ioctl_create_vm(unsigned long arg)
 	if (vmcs == NULL) {
 		return -ENOMEM;
 	}
-	vmcs_load(vmcs);
 	vmcs_clear(vmcs);
+	vmcs_load(vmcs);
 
 	r = get_unused_fd_flags(O_CLOEXEC);
 	if (r < 0) {

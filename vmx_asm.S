@@ -36,7 +36,6 @@
 
 
 #define LOAD_GUEST_REGS \
-    popq %rdi; \
     movq 0 * 8(%rdi), %rax; \
     movq 1 * 8(%rdi), %rbx; \
     movq 2 * 8(%rdi), %rcx; \
@@ -65,18 +64,19 @@
 vm_enter_guest:
     SAVE_HOST_REGS
 
-    movl (%esi), %r8d
+    movl (%rsi), %r8d
     cmpl $1, %r8d
     je exec_vmresume
     // disable the is_launch
-    movl $0, (%esi)
+    movl $1, (%rsi)
     LOAD_GUEST_REGS
     vmlaunch
     // when some error occured at the vmlaunch, the ret is executed.
-    movl $1, %eax
+    movq $1, %rax
     ret
 
 exec_vmresume:
+    popq %rdi
     LOAD_GUEST_REGS
     // when some error occured at the vmresume, the ret is executed.
     vmresume
@@ -90,4 +90,6 @@ vm_exit_guest:
     SAVE_GUEST_REGS
     LOAD_HOST_REGS
     //TODO
+    movq $0, %rax
+    movq $0, (%rax)
     ret
