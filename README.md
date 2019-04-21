@@ -4,7 +4,7 @@
 - design of a simple vmm
     - small code and single guest os.
 
-- learning linux kernel and kernel module. (for beginners, like me)
+- learning linux kernel and kernel module.
 
 - using hardware acceleration
     - Intel VMX and EPT
