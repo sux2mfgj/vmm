@@ -50,6 +50,8 @@ static struct vmcs *alloc_vmcs_region(void)
 	return vmcs;
 }
 
+static bool is_enabled = false;;
+
 static int vmxon(uint64_t address)
 {
 	uint32_t cr4;
@@ -67,6 +69,7 @@ static int vmxon(uint64_t address)
 	asm volatile("pushfq\n\t"
 		     "pop %0"
 		     : "=g"(rflags));
+    printk("rflags: 0x%llx\n", rflags);
 	is_error = rflags & X86_EFLAGS_CF;
 
 	return is_error;
@@ -638,8 +641,15 @@ static long vmm_vm_ioctl(struct file *filep, unsigned int ioctl,
 	}
 	case KVM_CREATE_VCPU: {
 		r = vmm_vm_ioctl_create_vcpu(vm, arg);
-
-	} break;
+        if(!r && !is_enabled)
+        {
+	        uint64_t vmxon_region_pa = __pa(vmxon_region);
+	        r = vmxon(vmxon_region_pa);
+            is_enabled = true;
+        }
+        return -EFAULT;
+        break;
+	}
 	default:
 		break;
 	}
