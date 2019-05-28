@@ -1,113 +1,65 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/fs.h>
+#include <linux/mm.h>
 #include <linux/kvm.h>
 
-#include "vmx.h"
+//#include "vmx.h"
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Shunsuke Mie <sux2mfgj@gmail.com>");
 
-#define DEVICE_NAME "kvm"
-#define CLASS_NAME "vmm"
+struct vmcs_header {
+	uint32_t revision_id : 31;
+	uint32_t shadow_vmcs_indicator : 1;
+};
 
-static int majorNumber;
-static struct class *vmm_class = NULL;
-static struct device *vmm_device = NULL;
+struct vmcs {
+	struct vmcs_header header;
+	uint32_t vmx_abort_indicator;
+	uint32_t data;
+};
 
-static long vmm_dev_ioctl(struct file *filep, unsigned int ioctl,
-			  unsigned long arg)
+static struct vmcs *vmxon_region = NULL;
+
+static struct vmcs *alloc_vmcs_region(void)
 {
-	long r = -EINVAL;
-	switch (ioctl) {
-	case KVM_GET_API_VERSION:
-		r = KVM_API_VERSION;
-		break;
-	case KVM_CREATE_VM:
-		r = vmm_dev_ioctl_create_vm(arg);
-		break;
-	case KVM_GET_VCPU_MMAP_SIZE:
-		// a pointer of the struct kvm_run is alined page and the size
-		// is less than one page (4k).
-		r = PAGE_SIZE;
-		break;
-	default:
-		break;
-	}
-	return r;
-}
+	struct vmcs *vmcs;
+	struct page *page;
+	uint32_t vmx_msr_low, vmx_msr_high;
+	size_t vmcs_size;
 
-static struct file_operations vmm_fops = { .unlocked_ioctl = vmm_dev_ioctl };
+	rdmsr(MSR_IA32_VMX_BASIC, vmx_msr_low, vmx_msr_high);
+	vmcs_size = vmx_msr_high & 0x1ffff;
 
-static int register_device(void)
-{
-	int r;
-	majorNumber = register_chrdev(0, DEVICE_NAME, &vmm_fops);
-	if (majorNumber < 0) {
-		printk(KERN_ALERT "vmm: failed to register a major number\n");
-		r = majorNumber;
-		goto failed;
+	page = alloc_page(GFP_KERNEL);
+	if (!page) {
+		return NULL;
 	}
 
-	vmm_class = class_create(THIS_MODULE, CLASS_NAME);
-	if (IS_ERR(vmm_class)) {
-		printk(KERN_ALERT "vmm: failed to create a class\n");
-		r = PTR_ERR(vmm_class);
-		goto failed_class_create;
-	}
+	vmcs = page_address(page);
+	memset(vmcs, 0, vmcs_size);
 
-	vmm_device = device_create(vmm_class, NULL, MKDEV(majorNumber, 0), NULL,
-				   DEVICE_NAME);
-	if (IS_ERR(vmm_device)) {
-		printk(KERN_ALERT "vmm: failed to create a device\n");
-		r = PTR_ERR(vmm_device);
-		goto failed_create_device;
-	}
-
-	return 0;
-
-failed_create_device:
-	class_unregister(vmm_class);
-	class_destroy(vmm_class);
-failed_class_create:
-	unregister_chrdev(majorNumber, DEVICE_NAME);
-failed:
-	return r;
-}
-
-static void unregister_device(void)
-{
-	device_destroy(vmm_class, MKDEV(majorNumber, 0));
-	class_unregister(vmm_class);
-	class_destroy(vmm_class);
-	unregister_chrdev(majorNumber, DEVICE_NAME);
+	vmcs->header.revision_id = vmx_msr_low;
+	return vmcs;
 }
 
 static int vmm_init(void)
 {
-	int r = 0;
-	printk("vmm: Hello, world\n");
+    if(vmxon_region != NULL)
+    {
+        vmxon_region = alloc_vmcs_region();
+    }
 
-	r = register_device();
-	if (r) {
-		printk("vmm: filed to register a device\n");
-		return r;
-	}
-
-	r = vmx_setup();
-	if (r) {
-		printk("vmm: error occured in configuration of intel VT-x\n");
-		return r;
-	}
-
-	return r;
+    return 0;
 }
 
 static void vmm_exit(void)
 {
-	vmx_tear_down();
-	unregister_device();
-	printk("vmm: byebye\n");
+    if(vmxon_region != NULL)
+    {
+        __free_page(virt_to_page(vmxon_region));
+    }
 }
 
 module_init(vmm_init);
