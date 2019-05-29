@@ -1,6 +1,8 @@
 obj-m += vmm.o
-vmm-objs := main.o #vmx.o vmx_asm.o
-ccflags-y += -g
+vmm-objs := main.o asm.o vmx.o #vmx_asm.o
+
+# the debug option causes a kernel panic. more details in issue #9.
+ccflags-y += #-g
 
 BUILD_PATH	:= /lib/modules/$(shell uname -r)/build
 

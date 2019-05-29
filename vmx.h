@@ -381,4 +381,8 @@ void vmx_tear_down(void);
 
 long vmm_dev_ioctl_create_vm(unsigned long arg);
 
+
+// define in asm.S
+uint64_t get_cpuid_info(void);
+
 #endif
