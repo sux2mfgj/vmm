@@ -23,6 +23,7 @@ struct vmcs {
 };
 
 static struct vmcs *vmxon_region = NULL;
+static struct vmcs *vmcs_region = NULL;
 
 static int vmxon(uint64_t address)
 {
@@ -119,9 +120,44 @@ static struct vmcs *alloc_vmcs_region(void)
 	return vmcs;
 }
 
+static inline void vmcs_load(struct vmcs *vmcs)
+{
+	uintptr_t physical_addr = __pa(vmcs);
+	asm volatile("vmptrld %0" ::"m"(physical_addr));
+}
+
+static inline int vmcs_clear(struct vmcs *vmcs)
+{
+	uintptr_t physical_addr = __pa(vmcs);
+    int r = 0;
+    uint64_t rflags;
+
+	asm volatile("vmclear %0" ::"m"(physical_addr));
+
+	asm volatile("pushfq\n\t"
+		     "pop %0"
+		     : "=g"(rflags));
+
+	r = rflags & X86_EFLAGS_CF;
+    if(r)
+    {
+        printk("VMfailnvalid\n");
+        return r;
+    }
+
+    r = rflags & X86_EFLAGS_ZF;
+    if(r)
+    {
+        printk("VMfailValid\n");
+        // TODO read a error number. a detail of the error number is in Section 30.4 of SDM vol3.
+        return r;
+    }
+
+    return r;
+}
+
 int vmx_setup(void)
 {
-
     int r = 0;
     if(vmxon_region != NULL)
     {
@@ -141,6 +177,18 @@ int vmx_setup(void)
         return -1;
     }
 
+    vmcs_region = alloc_vmcs_region();
+    if(vmcs_region == NULL)
+    {
+        return -1;
+    }
+
+    r = vmcs_clear(vmcs_region);
+    if(r)
+    {
+        return -1;
+    }
+
     return r;
 }
 
@@ -151,7 +199,13 @@ void vmx_tear_down(void)
     {
         vmxoff();
         __free_page(virt_to_page(vmxon_region));
-        printk("free and vmxoff\n");
+        printk("vmxoff and free the vmxon_region\n");
+    }
+    if(vmcs_region != NULL)
+    {
+        //vmcs_clear(vmcs_region);
+        __free_page(virt_to_page(vmcs_region));
+        printk("vmclar and free the vmcs_region\n");
     }
     printk("bye\n");
 }
