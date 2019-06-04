@@ -384,5 +384,7 @@ long vmm_dev_ioctl_create_vm(unsigned long arg);
 
 // define in asm.S
 uint64_t get_cpuid_info(void);
+void vm_exit_guest(void);
+void test_guest_rip(void);
 
 #endif
