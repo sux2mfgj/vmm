@@ -279,6 +279,9 @@ static int setup_vmcs(struct vmcs *vmcs)
 int vmx_setup(void)
 {
 	int r = 0;
+    uint64_t rflags;
+    uint64_t value;
+
 	if (vmxon_region != NULL) {
 		printk("why??\n");
 		return -1;
@@ -319,6 +322,13 @@ int vmx_setup(void)
 	}
 
     asm volatile ("vmlaunch");
+
+	asm volatile("pushfq\n\t"
+		     "pop %0"
+		     : "=g"(rflags));
+	printk("rflags 0x%llx\n", rflags);
+    value = vmcs_read(VM_INSTRUCTIN_ERROR);
+    printk("vm instruction error %d\n", (uint32_t)value);
     printk("failed to execute the vmlaunch instruction\n");
 
 	return r;
