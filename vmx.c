@@ -23,9 +23,9 @@ struct vmcs {
 };
 
 struct test_vm {
-    uintptr_t rip;
-    uintptr_t stack;
-    size_t size;
+	uintptr_t rip;
+	uintptr_t stack;
+	size_t size;
 };
 
 static struct vmcs *vmxon_region = NULL;
@@ -201,45 +201,45 @@ static void vmcs_write(enum vmcs_field_encoding encoding, uint64_t value)
 static int setup_vmcs(struct vmcs *vmcs)
 {
 	int r = 0;
-    uint64_t cr0, cr3, cr4;
-    struct desc_ptr dt;
-    uint64_t msr;
-    struct page* page;
+	uint64_t cr0, cr3, cr4;
+	struct desc_ptr dt;
+	uint64_t msr;
+	struct page *page;
 
-    cr0 = read_cr0();
-    vmcs_write(HOST_CR0, cr0);
+	cr0 = read_cr0();
+	vmcs_write(HOST_CR0, cr0);
 
-    cr3 = __read_cr3();
-    vmcs_write(HOST_CR3, cr0);
+	cr3 = __read_cr3();
+	vmcs_write(HOST_CR3, cr0);
 
-    asm volatile("movq %%cr4, %0": "=r"(cr4));
-    vmcs_write(HOST_CR4, cr4);
+	asm volatile("movq %%cr4, %0" : "=r"(cr4));
+	vmcs_write(HOST_CR4, cr4);
 
-    store_idt(&dt);
-    vmcs_write(HOST_IDTR_BASE, dt.address);
+	store_idt(&dt);
+	vmcs_write(HOST_IDTR_BASE, dt.address);
 
-    void *gdt = get_current_gdt_ro();
+	void *gdt = get_current_gdt_ro();
 
-    //store_gdt(&dt);
-    vmcs_write(HOST_GDTR_BASE, (uintptr_t)gdt);
+	//store_gdt(&dt);
+	vmcs_write(HOST_GDTR_BASE, (uintptr_t)gdt);
 
-    vmcs_write(HOST_RIP, (uintptr_t)vm_exit_guest);
+	vmcs_write(HOST_RIP, (uintptr_t)vm_exit_guest);
 
-    rdmsrl(MSR_IA32_SYSENTER_CS, msr);
-    vmcs_write(HOST_IA32_SYSENTER_CS, msr);
-    vmcs_write(GUEST_IA32_SYSENTER_CS, msr);
+	rdmsrl(MSR_IA32_SYSENTER_CS, msr);
+	vmcs_write(HOST_IA32_SYSENTER_CS, msr);
+	vmcs_write(GUEST_IA32_SYSENTER_CS, msr);
 
-    rdmsrl(MSR_IA32_SYSENTER_EIP, msr);
-    vmcs_write(HOST_IA32_SYSENTER_EIP, msr);
-    vmcs_write(GUEST_IA32_SYSENTER_EIP, msr);
+	rdmsrl(MSR_IA32_SYSENTER_EIP, msr);
+	vmcs_write(HOST_IA32_SYSENTER_EIP, msr);
+	vmcs_write(GUEST_IA32_SYSENTER_EIP, msr);
 
-    rdmsrl(MSR_IA32_SYSENTER_ESP, msr);
-    vmcs_write(HOST_IA32_SYSENTER_ESP, msr);
-    vmcs_write(GUEST_IA32_SYSENTER_ESP, msr);
+	rdmsrl(MSR_IA32_SYSENTER_ESP, msr);
+	vmcs_write(HOST_IA32_SYSENTER_ESP, msr);
+	vmcs_write(GUEST_IA32_SYSENTER_ESP, msr);
 
-    rdmsrl(MSR_IA32_SYSENTER_EIP, msr);
-    vmcs_write(HOST_IA32_SYSENTER_EIP, msr);
-    vmcs_write(GUEST_IA32_SYSENTER_EIP, msr);
+	rdmsrl(MSR_IA32_SYSENTER_EIP, msr);
+	vmcs_write(HOST_IA32_SYSENTER_EIP, msr);
+	vmcs_write(GUEST_IA32_SYSENTER_EIP, msr);
 
 	vmcs_write(HOST_CS_SELECTOR, 0);
 	vmcs_write(HOST_DS_SELECTOR, __KERNEL_DS);
@@ -247,31 +247,67 @@ static int setup_vmcs(struct vmcs *vmcs)
 	vmcs_write(HOST_SS_SELECTOR, __KERNEL_DS);
 	vmcs_write(HOST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
 
-
-    vmcs_write(GUEST_CS_SELECTOR, 0);
+	vmcs_write(GUEST_CS_SELECTOR, 0);
 	vmcs_write(GUEST_DS_SELECTOR, __KERNEL_DS);
 	vmcs_write(GUEST_ES_SELECTOR, __KERNEL_DS);
 	vmcs_write(GUEST_SS_SELECTOR, __KERNEL_DS);
 	vmcs_write(GUEST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
 
-    page = alloc_page(GFP_KERNEL);
+	page = alloc_page(GFP_KERNEL);
 	if (!page) {
 		return -1;
 	}
 
-    vm.rip = (uintptr_t)test_guest_rip;
+	vm.rip = (uintptr_t)test_guest_rip;
 	vm.stack = (uintptr_t)page_address(page) + 0x1000;
 
-    vmcs_write(GUEST_RIP, vm.rip);
-    vmcs_write(GUEST_RSP, vm.stack);
-    vmcs_write(GUEST_CR0, cr0);
-    vmcs_write(GUEST_CR3, cr3);
-    vmcs_write(GUEST_CR4, cr4);
+	vmcs_write(GUEST_RIP, vm.rip);
+	vmcs_write(GUEST_RSP, vm.stack);
+	vmcs_write(GUEST_CR0, cr0);
+	vmcs_write(GUEST_CR3, cr3);
+	vmcs_write(GUEST_CR4, cr4);
 
-    store_idt(&dt);
-    vmcs_write(GUEST_IDTR_BASE, dt.address);
+	store_idt(&dt);
+	vmcs_write(GUEST_IDTR_BASE, dt.address);
 
-    vmcs_write(GUEST_IDTR_BASE, (uintptr_t)gdt);
+	vmcs_write(GUEST_IDTR_BASE, (uintptr_t)gdt);
+
+	//uint32_t msr32, msr32_1;
+	//rdmsrl(MSR_IA32_VMX_TRUE_ENTRY_CTLS, msr32_1);
+	//printk("TRUE 0x%x\n", msr32_1);
+	uint32_t upper, lower;
+
+	rdmsrl(MSR_IA32_VMX_ENTRY_CTLS, msr);
+	printk("MSR_IA32_VMX_ENTRY_CTLS 0x%llx\n", msr);
+	printk("upper 0x%x\n", (uint32_t)(msr >> 32));
+	upper = msr >> 32;
+	lower = msr;
+	printk("lower 0x%x\n", (uint32_t)msr);
+	vmcs_write(VM_ENTRY_CONTROLS,
+		   (VM_ENTRY_CTRL_IA32e_MODE_GUEST & (uint32_t)msr) |
+			   (uint32_t)(msr >> 32));
+
+	rdmsrl(MSR_IA32_VMX_EXIT_CTLS, msr);
+	upper = msr >> 32;
+	lower = msr;
+	vmcs_write(VM_EXIT_CONTROLS,
+		   (VM_EXIT_CTRL_HOST_ADDRESS_SPACE_SIZE |
+		    VM_EXIT_CTRL_ACK_INTERRUPT_ON_EXIT & lower) |
+			   upper);
+
+	rdmsrl(MSR_IA32_VMX_PROCBASED_CTLS, msr);
+	upper = msr >> 32;
+	lower = msr;
+	vmcs_write(PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS,
+		   (CPU_BASED_EXEC_HLT_EXIT |
+		    CPU_BASED_EXEC_ACTIVE_SECONDARY_CTRLS & lower) |
+			   upper);
+
+	rdmsrl(MSR_IA32_VMX_PROCBASED_CTLS2, msr);
+	upper = msr >> 32;
+	lower = msr;
+	vmcs_write(SECONDARY_PROCESSOR_BASED_VM_EXEC_CONTROL,
+		   (SECOND_EXEC_ENABLE_RDTSCP | upper) & lower);
 
 	return r;
 }
@@ -279,8 +315,8 @@ static int setup_vmcs(struct vmcs *vmcs)
 int vmx_setup(void)
 {
 	int r = 0;
-    uint64_t rflags;
-    uint64_t value;
+	uint64_t rflags;
+	uint64_t value;
 
 	if (vmxon_region != NULL) {
 		printk("why??\n");
@@ -321,15 +357,15 @@ int vmx_setup(void)
 		return -1;
 	}
 
-    asm volatile ("vmlaunch");
+	asm volatile("vmlaunch");
 
 	asm volatile("pushfq\n\t"
 		     "pop %0"
 		     : "=g"(rflags));
 	printk("rflags 0x%llx\n", rflags);
-    value = vmcs_read(VM_INSTRUCTIN_ERROR);
-    printk("vm instruction error %d\n", (uint32_t)value);
-    printk("failed to execute the vmlaunch instruction\n");
+	value = vmcs_read(VM_INSTRUCTIN_ERROR);
+	printk("vm instruction error %d\n", (uint32_t)value);
+	printk("failed to execute the vmlaunch instruction\n");
 
 	return r;
 }
@@ -351,6 +387,6 @@ void vmx_tear_down(void)
 
 void vm_exit_handler(uintptr_t guest_regs_ptr)
 {
-    panic("handling the vm exit\n");
-    return;
+	panic("handling the vm exit\n");
+	return;
 }
