@@ -332,29 +332,29 @@ enum second_processor_based_vm_exec_ctrl {
 };
 
 enum vm_exit_control {
-    VM_EXIT_CTRL_SAVE_DEBUG_CTRL = 1 << 2,
-    VM_EXIT_CTRL_HOST_ADDRESS_SPACE_SIZE = 1 << 9,
-    VM_EXIT_CTRL_LOAD_PERF_GLOBAL_CTRL = 1 << 12,
-    VM_EXIT_CTRL_ACK_INTERRUPT_ON_EXIT = 1 << 15,
-    VM_EXIT_CTRL_SAVE_IA32_PAT = 1 << 18,
-    VM_EXIT_CTRL_LOAD_IA32_PAT = 1 << 19,
-    VM_EXIT_CTRL_SAVE_IA32_EFER = 1 << 20,
-    VM_EXIT_CTRL_LOAD_IA32_EFER = 1 << 21,
-    VM_EXIT_CTRL_SAVE_VMX_PREEMPT_TIMER = 1 << 22,
-    VM_EXIT_CTRL_CLEAR_IA32_BNDCFGS = 1 << 23,
-    VM_EXIT_CTRL_CONCEA_VMX_FROM_PT = 1 << 24,
+	VM_EXIT_CTRL_SAVE_DEBUG_CTRL = 1 << 2,
+	VM_EXIT_CTRL_HOST_ADDRESS_SPACE_SIZE = 1 << 9,
+	VM_EXIT_CTRL_LOAD_PERF_GLOBAL_CTRL = 1 << 12,
+	VM_EXIT_CTRL_ACK_INTERRUPT_ON_EXIT = 1 << 15,
+	VM_EXIT_CTRL_SAVE_IA32_PAT = 1 << 18,
+	VM_EXIT_CTRL_LOAD_IA32_PAT = 1 << 19,
+	VM_EXIT_CTRL_SAVE_IA32_EFER = 1 << 20,
+	VM_EXIT_CTRL_LOAD_IA32_EFER = 1 << 21,
+	VM_EXIT_CTRL_SAVE_VMX_PREEMPT_TIMER = 1 << 22,
+	VM_EXIT_CTRL_CLEAR_IA32_BNDCFGS = 1 << 23,
+	VM_EXIT_CTRL_CONCEA_VMX_FROM_PT = 1 << 24,
 };
 
 enum vm_entry_control {
-    VM_ENTRY_CTRL_LOAD_DEBUG_CONTROLS = 1 << 2,
-    VM_ENTRY_CTRL_IA32e_MODE_GUEST = 1 << 9,
-    VM_ENTRY_CTRL_ENTRY_TO_SMM = 1 << 10,
-    VM_ENTRY_CTRL_DEACTIVATE_DUALMONITOR_TREATMENT = 1 << 11,
-    VM_ENTRY_CTRL_LOAD_IA32_PERF_GLOBAL_CTRL = 1 << 13,
-    VM_ENTRY_CTRL_LOAD_IA32_PAT = 1 << 14,
-    VM_ENTRY_CTRL_LOAD_IA32_EFER = 1 << 15,
-    VM_ENTRY_CTRL_LOAD_IA32_BNDCFGS = 1 << 16,
-    VM_ENTRY_CTRL_CONCEA_VMX_FROM_PT = 1 << 17,
+	VM_ENTRY_CTRL_LOAD_DEBUG_CONTROLS = 1 << 2,
+	VM_ENTRY_CTRL_IA32e_MODE_GUEST = 1 << 9,
+	VM_ENTRY_CTRL_ENTRY_TO_SMM = 1 << 10,
+	VM_ENTRY_CTRL_DEACTIVATE_DUALMONITOR_TREATMENT = 1 << 11,
+	VM_ENTRY_CTRL_LOAD_IA32_PERF_GLOBAL_CTRL = 1 << 13,
+	VM_ENTRY_CTRL_LOAD_IA32_PAT = 1 << 14,
+	VM_ENTRY_CTRL_LOAD_IA32_EFER = 1 << 15,
+	VM_ENTRY_CTRL_LOAD_IA32_BNDCFGS = 1 << 16,
+	VM_ENTRY_CTRL_CONCEA_VMX_FROM_PT = 1 << 17,
 };
 
 struct vcpu {
@@ -364,11 +364,11 @@ struct vcpu {
 	struct kvm_regs regs;
 	struct kvm_sregs sregs;
 	struct kvm_debugregs debug_regs;
-    u64 eptp;
+	u64 eptp;
 	enum mp_state mp_state;
 	uint32_t smbase;
 
-    int is_launch;
+	int is_launch;
 };
 
 struct vm {
@@ -380,7 +380,6 @@ int vmx_setup(void);
 void vmx_tear_down(void);
 
 long vmm_dev_ioctl_create_vm(unsigned long arg);
-
 
 // define in asm.S
 uint64_t get_cpuid_info(void);

@@ -17,6 +17,7 @@ static int vmm_init(void)
     {
         return -1;
     }
+
 	return 0;
 }
 
