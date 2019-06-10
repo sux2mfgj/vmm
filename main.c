@@ -15,7 +15,8 @@ static int vmm_init(void)
 	r = vmx_setup();
     if(r)
     {
-        return -1;
+        vmx_tear_down();
+        return r;
     }
 
 	return 0;

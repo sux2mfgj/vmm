@@ -19,7 +19,8 @@ struct vmcs_header {
 struct vmcs {
 	struct vmcs_header header;
 	uint32_t vmx_abort_indicator;
-	uint32_t data;
+	//uint32_t data;
+    char data[0];
 };
 
 struct test_vm {
@@ -36,7 +37,7 @@ static struct test_vm vm;
 static int vmxon(uint64_t address)
 {
 	uint64_t cr4, cr0;
-	uint64_t rflags, is_error;
+	uint64_t rflags, is_error, is_error2;
 	uint64_t msr, cpuid;
 	uint8_t phys_bit_width;
 
@@ -88,8 +89,9 @@ static int vmxon(uint64_t address)
 		     : "=g"(rflags));
 	printk("rflags 0x%llx\n", rflags);
 	is_error = rflags & X86_EFLAGS_CF;
+    is_error2 = rflags & X86_EFLAGS_ZF;
 
-	return is_error;
+	return is_error | is_error2;
 }
 
 static int vmxoff(void)
@@ -230,11 +232,11 @@ static int setup_vmcs(struct vmcs *vmcs)
     uintptr_t host_rsp;
 
 	cr0 = read_cr0();
-    printk("write cr0\n");
+    printk("write cr0: %08llx\n", cr0);
 	vmcs_write(HOST_CR0, cr0);
 
 	cr3 = __read_cr3();
-    printk("write cr3\n");
+    printk("write cr3: %08llx\n", cr3);
 	vmcs_write(HOST_CR3, cr3);
 
 	asm volatile("movq %%cr4, %0" : "=r"(cr4));
@@ -245,7 +247,9 @@ static int setup_vmcs(struct vmcs *vmcs)
     printk("write idtr\n");
 	vmcs_write(HOST_IDTR_BASE, dt.address);
 
+    preempt_disable();
 	gdt = get_current_gdt_ro();
+    preempt_enable();
 	//store_gdt(&dt);
     printk("write gdtr\n");
 	vmcs_write(HOST_GDTR_BASE, (uintptr_t)gdt);
@@ -374,8 +378,9 @@ int vmx_setup(void)
 	}
 
 	printk("vmlaunch\n");
-	asm volatile("vmlaunch");
+	//asm volatile("vmlaunch");
 
+    /*
 	asm volatile("pushfq\n\t"
 		     "pop %0"
 		     : "=g"(rflags));
@@ -383,22 +388,26 @@ int vmx_setup(void)
 	value = vmcs_read(VM_INSTRUCTIN_ERROR);
 	printk("vm instruction error %d\n", (uint32_t)value);
 	printk("failed to execute the vmlaunch instruction\n");
+    r = value;
+    */
 
 	return r;
 }
 
 void vmx_tear_down(void)
 {
-	if (vmxon_region != NULL) {
-		vmxoff();
-		__free_page(virt_to_page(vmxon_region));
-		printk("vmxoff and free the vmxon_region\n");
-	}
 	if (vmcs_region != NULL) {
 		vmcs_clear(vmcs_region);
 		__free_page(virt_to_page(vmcs_region));
 		printk("vmclar and free the vmcs_region\n");
 	}
+
+	if (vmxon_region != NULL) {
+		vmxoff();
+		__free_page(virt_to_page(vmxon_region));
+		printk("vmxoff and free the vmxon_region\n");
+	}
+
 	printk("bye\n");
 }
 
