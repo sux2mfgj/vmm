@@ -1,5 +1,5 @@
 obj-m += vmm.o
-vmm-objs := main.o asm.o vmx.o #vmx_asm.o
+vmm-objs := main.o vmx.o asm.o #vmx_asm.o
 
 # the debug option causes a kernel panic. more details in issue #9.
 ccflags-y += #-g

@@ -1,13 +1,13 @@
-.globl get_cpuid_info
+#include <linux/linkage.h>
 
 .text
-get_cpuid_info:
+ENTRY(get_cpuid_info)
     movl $0x80000008, %eax
     cpuid
     ret
+ENDPROC(get_cpuid_info)
 
-.globl vm_exit_guest
-vm_exit_guest:
+ENTRY(vm_exit_guest)
     pushq %r15
     pushq %r14
     pushq %r13
@@ -25,11 +25,13 @@ vm_exit_guest:
     pushq %rcx
     pushq %rax
 
-    movq %rsp, %rcx # a first argument of vm_exit_handler
+    movq %rsp, %rcx // a first argument of vm_exit_handler
     call vm_exit_handler
 
     ret
+ENDPROC(vm_exit_guest)
 
-.globl test_guest_rip
-test_guest_rip:
+ENTRY(test_guest_rip)
     hlt
+    ret
+ENDPROC(test_guest_rip)

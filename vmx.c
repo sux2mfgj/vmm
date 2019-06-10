@@ -182,9 +182,10 @@ static inline uint64_t vmcs_read(enum vmcs_field_encoding encoding)
 {
 	unsigned long value;
 	unsigned long field = encoding;
+    uint64_t rflags;
+
 	asm volatile("vmread %1, %0" : "=r"(value) : "r"(field));
 
-    uint64_t rflags;
     asm volatile("pushfq\n\t"
 		     "pop %0"
 		     : "=g"(rflags));
@@ -195,9 +196,9 @@ static inline uint64_t vmcs_read(enum vmcs_field_encoding encoding)
 static void vmcs_write(enum vmcs_field_encoding encoding, uint64_t value)
 {
 	unsigned long field = encoding;
+	uint64_t rflags, result;
 	asm volatile("vmwrite %1, %0" ::"r"(field), "r"(value));
 
-	uint64_t rflags, result;
 	asm volatile("pushfq\n\t"
 		     "pop %0"
 		     : "=g"(rflags));
@@ -206,7 +207,7 @@ static void vmcs_write(enum vmcs_field_encoding encoding, uint64_t value)
 	printk("vm instruction error %d\n", (uint32_t)value);
 }
 
-static int adjust_vmx_control(const uint32_t msr,
+static void adjust_vmx_control(const uint32_t msr,
 			      const enum vmcs_field_encoding dest,
 			      uint64_t flags)
 {
@@ -214,7 +215,7 @@ static int adjust_vmx_control(const uint32_t msr,
 	rdmsr(msr, lower, upper);
 	flags &= upper;
 	flags |= lower;
-	printk("0x%08x 0x%08x 0x%08x\n", upper, lower, flags);
+	printk("0x%08x 0x%08x 0x%08llx\n", upper, lower, flags);
 	vmcs_write(dest, flags);
 }
 
@@ -226,15 +227,15 @@ static int setup_vmcs(struct vmcs *vmcs)
 	uint64_t msr;
 	struct page *page;
 	void *gdt;
+    uintptr_t host_rsp;
 
-	/*
 	cr0 = read_cr0();
     printk("write cr0\n");
 	vmcs_write(HOST_CR0, cr0);
 
 	cr3 = __read_cr3();
     printk("write cr3\n");
-	vmcs_write(HOST_CR3, cr0);
+	vmcs_write(HOST_CR3, cr3);
 
 	asm volatile("movq %%cr4, %0" : "=r"(cr4));
     printk("write cr4\n");
@@ -253,7 +254,7 @@ static int setup_vmcs(struct vmcs *vmcs)
 	if (!page) {
 		return -1;
 	}
-	uintptr_t host_rsp = (uintptr_t)page_address(page) + 0x1000 - 1;
+	host_rsp = (uintptr_t)page_address(page) + 0x1000 - 1;
 
 	vmcs_write(HOST_RIP, (uintptr_t)vm_exit_guest);
     printk("write host rip\n");
@@ -305,48 +306,7 @@ static int setup_vmcs(struct vmcs *vmcs)
 	store_idt(&dt);
 	vmcs_write(GUEST_IDTR_BASE, dt.address);
 
-	vmcs_write(GUEST_IDTR_BASE, (uintptr_t)gdt);
-    */
-
-	/*
-	//uint32_t msr32, msr32_1;
-	//rdmsrl(MSR_IA32_VMX_TRUE_ENTRY_CTLS, msr32_1);
-	//printk("TRUE 0x%x\n", msr32_1);
-	uint32_t upper, lower, value = 0;;
-
-	rdmsr(MSR_IA32_VMX_ENTRY_CTLS, lower, upper);
-	//upper = msr >> 32; lower = msr;
-	printk("0x%08x 0x%08x\n", lower & upper);
-	vmcs_write(VM_ENTRY_CONTROLS,
-		   (VM_ENTRY_CTRL_IA32e_MODE_GUEST | lower) & upper);
-
-	rdmsr(MSR_IA32_VMX_EXIT_CTLS, lower, upper);
-	//upper = msr >> 32; lower = msr;
-	printk("0x%08x 0x%08x\n", lower & upper);
-	vmcs_write(VM_EXIT_CONTROLS,
-		   (VM_EXIT_CTRL_HOST_ADDRESS_SPACE_SIZE |
-		    VM_EXIT_CTRL_ACK_INTERRUPT_ON_EXIT | lower) &
-			   upper);
-
-	rdmsr(MSR_IA32_VMX_PROCBASED_CTLS, lower, upper);
-	//upper = msr >> 32; lower = msr;
-	printk("0x%08x 0x%08x\n", lower & upper);
-	vmcs_write(PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS,
-		   (CPU_BASED_EXEC_HLT_EXIT |
-		    CPU_BASED_EXEC_ACTIVE_SECONDARY_CTRLS | lower) &
-			   upper);
-
-	rdmsr(MSR_IA32_VMX_PROCBASED_CTLS2, lower, upper);
-	//upper = msr >> 32; lower = msr;
-	printk("0x%08x 0x%08x\n", lower & upper);
-	vmcs_write(SECONDARY_PROCESSOR_BASED_VM_EXEC_CONTROL,
-		   (SECOND_EXEC_ENABLE_RDTSCP | lower) & upper);
-
-	rdmsr(MSR_IA32_VMX_PINBASED_CTLS, lower, upper);
-	//upper = msr >> 32; lower = msr;
-	printk("0x%08x 0x%08x\n", upper, lower);
-	vmcs_write(PIN_BASED_VM_EXEC_CONTROLS, lower & upper);
-    */
+	vmcs_write(GUEST_GDTR_BASE, (uintptr_t)gdt);
 
 	printk("vw GUEST_INTERRUPTIBILITY_STATE\n");
 	vmcs_write(GUEST_INTERRUPTIBILITY_STATE, 0);
@@ -354,7 +314,7 @@ static int setup_vmcs(struct vmcs *vmcs)
 	vmcs_write(GUEST_ACTIVITY_STATE, 0);
 	printk("vw VM_ENTRY_CONTROLS\n");
 	adjust_vmx_control(MSR_IA32_VMX_ENTRY_CTLS, VM_ENTRY_CONTROLS,
-			   0); //VM_ENTRY_CTRL_IA32e_MODE_GUEST);
+			   VM_ENTRY_CTRL_IA32e_MODE_GUEST);
     printk("vw VM_EXIT_CONTROLS\n");
 	adjust_vmx_control(MSR_IA32_VMX_EXIT_CTLS, VM_EXIT_CONTROLS, 0);
     printk("vw PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS\n");
@@ -435,7 +395,7 @@ void vmx_tear_down(void)
 		printk("vmxoff and free the vmxon_region\n");
 	}
 	if (vmcs_region != NULL) {
-		//vmcs_clear(vmcs_region);
+		vmcs_clear(vmcs_region);
 		__free_page(virt_to_page(vmcs_region));
 		printk("vmclar and free the vmcs_region\n");
 	}
@@ -444,6 +404,7 @@ void vmx_tear_down(void)
 
 void vm_exit_handler(uintptr_t guest_regs_ptr)
 {
-	panic("handling the vm exit\n");
+	printk("handling the vm exit\n");
+    while(true){}
 	return;
 }
