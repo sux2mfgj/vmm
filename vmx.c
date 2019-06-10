@@ -377,10 +377,10 @@ int vmx_setup(void)
 		return -1;
 	}
 
-	printk("vmlaunch\n");
-	//asm volatile("vmlaunch");
-
     /*
+	printk("vmlaunch\n");
+	asm volatile("vmlaunch");
+
 	asm volatile("pushfq\n\t"
 		     "pop %0"
 		     : "=g"(rflags));
