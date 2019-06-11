@@ -5,6 +5,7 @@
 #include <linux/anon_inodes.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
+#include <asm/desc.h>
 
 #include "vmx.h"
 
@@ -224,35 +225,42 @@ static void adjust_vmx_control(const uint32_t msr,
 static int setup_vmcs(struct vmcs *vmcs)
 {
 	int r = 0;
-	uint64_t cr0, cr3, cr4;
+	uint64_t cr0, cr3, cr4, rflags;
 	struct desc_ptr dt;
 	uint64_t msr;
 	struct page *page;
-	void *gdt;
+	//void *gdt;
     uintptr_t host_rsp;
+
+    preempt_disable();
 
 	cr0 = read_cr0();
     printk("write cr0: %08llx\n", cr0);
 	vmcs_write(HOST_CR0, cr0);
+    vmcs_write(GUEST_CR0, cr0);
 
 	cr3 = __read_cr3();
     printk("write cr3: %08llx\n", cr3);
 	vmcs_write(HOST_CR3, cr3);
+    vmcs_write(GUEST_CR3, cr3);
 
 	asm volatile("movq %%cr4, %0" : "=r"(cr4));
     printk("write cr4\n");
 	vmcs_write(HOST_CR4, cr4);
+    vmcs_write(GUEST_CR4, cr4);
 
 	store_idt(&dt);
     printk("write idtr\n");
 	vmcs_write(HOST_IDTR_BASE, dt.address);
+    vmcs_write(GUEST_IDTR_BASE, dt.address);
+    vmcs_write(GUEST_IDTR_LIMIT, dt.size);
 
-    preempt_disable();
-	gdt = get_current_gdt_ro();
-    preempt_enable();
-	//store_gdt(&dt);
+	//gdt = get_current_gdt_ro();
+	native_store_gdt(&dt);
     printk("write gdtr\n");
-	vmcs_write(HOST_GDTR_BASE, (uintptr_t)gdt);
+	vmcs_write(HOST_GDTR_BASE, dt.address);
+	vmcs_write(GUEST_GDTR_BASE, dt.address);
+	vmcs_write(GUEST_GDTR_LIMIT, dt.size);
 
 	page = alloc_page(GFP_KERNEL);
 	if (!page) {
@@ -264,6 +272,20 @@ static int setup_vmcs(struct vmcs *vmcs)
     printk("write host rip\n");
 	vmcs_write(HOST_RSP, host_rsp);
     printk("write host rsp\n");
+
+
+    page = alloc_page(GFP_KERNEL);
+	if (!page) {
+		return -1;
+	}
+
+	vm.rip = (uintptr_t)test_guest_rip;
+	vm.stack = (uintptr_t)page_address(page) + 0x1000 - 1;
+
+    vmcs_write(VMCS_LINK_POINTER_FULL, -1ull);
+
+	vmcs_write(GUEST_RIP, vm.rip);
+	vmcs_write(GUEST_RSP, vm.stack);
 
 	rdmsrl(MSR_IA32_SYSENTER_CS, msr);
 	vmcs_write(HOST_IA32_SYSENTER_CS, msr);
@@ -281,36 +303,48 @@ static int setup_vmcs(struct vmcs *vmcs)
 	vmcs_write(HOST_IA32_SYSENTER_EIP, msr);
 	vmcs_write(GUEST_IA32_SYSENTER_EIP, msr);
 
-	vmcs_write(HOST_CS_SELECTOR, 0);
+	vmcs_write(HOST_CS_SELECTOR, __KERNEL_CS);
 	vmcs_write(HOST_DS_SELECTOR, __KERNEL_DS);
 	vmcs_write(HOST_ES_SELECTOR, __KERNEL_DS);
 	vmcs_write(HOST_SS_SELECTOR, __KERNEL_DS);
 	vmcs_write(HOST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
+    vmcs_write(HOST_FS_SELECTOR, 0);
+    vmcs_write(HOST_GS_SELECTOR, 0);
+    vmcs_write(HOST_FS_BASE, 0);
+    vmcs_write(HOST_GS_BASE, 0);
 
-	vmcs_write(GUEST_CS_SELECTOR, 0);
+	vmcs_write(GUEST_CS_SELECTOR, __KERNEL_CS);
 	vmcs_write(GUEST_DS_SELECTOR, __KERNEL_DS);
 	vmcs_write(GUEST_ES_SELECTOR, __KERNEL_DS);
 	vmcs_write(GUEST_SS_SELECTOR, __KERNEL_DS);
 	vmcs_write(GUEST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
+    vmcs_write(GUEST_FS_SELECTOR, 0);
+    vmcs_write(GUEST_GS_SELECTOR, 0);
+    vmcs_write(GUEST_FS_BASE, 0);
+    vmcs_write(GUEST_GS_BASE, 0);
 
-	page = alloc_page(GFP_KERNEL);
-	if (!page) {
-		return -1;
-	}
+    vmcs_write(GUEST_DR7, 0x400);
 
-	vm.rip = (uintptr_t)test_guest_rip;
-	vm.stack = (uintptr_t)page_address(page) + 0x1000;
+    asm volatile("pushfq\n\t"
+		     "pop %0"
+		     : "=g"(rflags));
+    vmcs_write(GUEST_RFLAGS, rflags);
 
-	vmcs_write(GUEST_RIP, vm.rip);
-	vmcs_write(GUEST_RSP, vm.stack);
-	vmcs_write(GUEST_CR0, cr0);
-	vmcs_write(GUEST_CR3, cr3);
-	vmcs_write(GUEST_CR4, cr4);
+    vmcs_write(TSC_OFFSET_FULL, 0);
+    //vmcs_write(TSC_OFFSET_HIGH, 0);
 
-	store_idt(&dt);
-	vmcs_write(GUEST_IDTR_BASE, dt.address);
+    vmcs_write(PAGE_FAULT_ERROR_CODE_MASK, 0);
+    vmcs_write(PAGE_FAULT_ERROR_CODE_MATCH, 0);
 
-	vmcs_write(GUEST_GDTR_BASE, (uintptr_t)gdt);
+    vmcs_write(VM_EXIT_MSR_STORE_COUNT, 0);
+    vmcs_write(VM_EXIT_MSR_LOAD_COUNT, 0);
+
+    vmcs_write(VM_ENTRY_MSR_LOAD_COUNT, 0);
+    vmcs_write(VM_ENTRY_INTERRUPTION_INFO_FIELD, 0);
+
+    rdmsrl(MSR_IA32_DEBUGCTLMSR, msr);
+    vmcs_write(GUEST_IA32_DEBUGCTL_FULL, msr);
+    //vmcs_write(GUEST_IA32_DEBUGCTL_FULL, msr & 0xffffffff); vmcs_write(GUEST_IA32_DEBUGCTL_HIGH, msr >> 32);
 
 	printk("vw GUEST_INTERRUPTIBILITY_STATE\n");
 	vmcs_write(GUEST_INTERRUPTIBILITY_STATE, 0);
@@ -329,6 +363,7 @@ static int setup_vmcs(struct vmcs *vmcs)
 	adjust_vmx_control(MSR_IA32_VMX_PINBASED_CTLS,
 			   PIN_BASED_VM_EXEC_CONTROLS, 0);
 
+    preempt_enable();
 	return r;
 }
 
@@ -377,7 +412,6 @@ int vmx_setup(void)
 		return -1;
 	}
 
-    /*
 	printk("vmlaunch\n");
 	asm volatile("vmlaunch");
 
@@ -389,7 +423,6 @@ int vmx_setup(void)
 	printk("vm instruction error %d\n", (uint32_t)value);
 	printk("failed to execute the vmlaunch instruction\n");
     r = value;
-    */
 
 	return r;
 }

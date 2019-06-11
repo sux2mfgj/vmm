@@ -8,6 +8,7 @@ ENTRY(get_cpuid_info)
 ENDPROC(get_cpuid_info)
 
 ENTRY(vm_exit_guest)
+    jmp vm_exit_guest
     pushq %r15
     pushq %r14
     pushq %r13
