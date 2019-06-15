@@ -12,32 +12,29 @@ MODULE_AUTHOR("Shunsuke Mie <sux2mfgj@gmail.com>");
 #define DEVICE_NAME "kvm"
 #define CLASS_NAME "vmm"
 
-
 static int majorNumber;
 static struct class *vmm_class = NULL;
 static struct device *vmm_device = NULL;
 
-static long vmm_dev_ioctl(struct file* filep, unsigned int ioctl, unsigned long arg)
+static long vmm_dev_ioctl(struct file *filep, unsigned int ioctl,
+			  unsigned long arg)
 {
-    long r = -EINVAL;
-    switch(ioctl)
-    {
-        case VMM_DEBUG:
-            r = vmx_run();
-            // TODO
-            break;
+	long r = -EINVAL;
+	switch (ioctl) {
+	case VMM_DEBUG:
+		r = vmx_run();
+		// TODO
+		break;
 
-        default:
-            printk("not yet implemented\n");
-            break;
-    }
+	default:
+		printk("not yet implemented\n");
+		break;
+	}
 
-    return r;
+	return r;
 }
 
-static struct file_operations vmm_fops = {
-	.unlocked_ioctl = vmm_dev_ioctl
-};
+static struct file_operations vmm_fops = { .unlocked_ioctl = vmm_dev_ioctl };
 
 static int register_device(void)
 {
@@ -86,33 +83,32 @@ static void unregister_device(void)
 static int vmm_init(void)
 {
 	int r = 0;
-    r = register_device();
-    if(r)
-    {
-        printk("failed register a device\n");
-        goto failed;
-    }
+	r = register_device();
+	if (r) {
+		printk("failed register a device\n");
+		goto failed;
+	}
 
 	r = vmx_setup();
 	if (r) {
-        printk("failed to setup the intel VT-x\n");
-        goto failed_unreg;
+		printk("failed to setup the intel VT-x\n");
+		goto failed_unreg;
 	}
 
-    printk("ok\n");
+	printk("ok\n");
 	return 0;
 
 failed_unreg:
-    unregister_device();
+	unregister_device();
 failed:
-    return r;
+	return r;
 }
 
 static void vmm_exit(void)
 {
 	vmx_tear_down();
-    unregister_device();
-    printk("bye\n");
+	unregister_device();
+	printk("bye\n");
 }
 
 module_init(vmm_init);

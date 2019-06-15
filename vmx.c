@@ -37,12 +37,15 @@ static struct vmcs *vmcs_region = NULL;
 
 static struct test_vm vm;
 
+static inline uint64_t vmcs_read(enum vmcs_field_encoding encoding);
+static inline int check_vmoperation_result(void);
+
 static int vmxon(uint64_t address)
 {
 	uint64_t cr4, cr0;
-	uint64_t rflags, is_error, is_error2;
 	uint64_t msr, cpuid;
 	uint8_t phys_bit_width;
+	int r = 0;
 
 	cpuid = get_cpuid_info();
 	printk("cpuid 0x%llx\n", cpuid);
@@ -86,15 +89,9 @@ static int vmxon(uint64_t address)
 	// vmxon
 	asm volatile("vmxon %0" : : "m"(address));
 
-	// check the result
-	asm volatile("pushfq\n\t"
-		     "pop %0"
-		     : "=g"(rflags));
-	printk("rflags 0x%llx\n", rflags);
-	is_error = rflags & X86_EFLAGS_CF;
-	is_error2 = rflags & X86_EFLAGS_ZF;
+	r = check_vmoperation_result();
 
-	return is_error | is_error2;
+	return r;
 }
 
 static int vmxoff(void)
@@ -130,13 +127,10 @@ static struct vmcs *alloc_vmcs_region(int cpu)
 	return vmcs;
 }
 
-static inline int vmcs_load(struct vmcs *vmcs)
+static inline int check_vmoperation_result(void)
 {
-	uintptr_t physical_addr = __pa(vmcs);
-	int r = 0;
 	uint64_t rflags;
-
-	asm volatile("vmptrld %0" ::"m"(physical_addr));
+	int r = 0;
 
 	asm volatile("pushfq\n\t"
 		     "pop %0"
@@ -150,10 +144,22 @@ static inline int vmcs_load(struct vmcs *vmcs)
 
 	r = rflags & X86_EFLAGS_ZF;
 	if (r) {
-		printk("VMfailValid\n");
-		// TODO read a error number. a detail of the error number is in Section 30.4 of SDM vol3.
+		r = vmcs_read(VM_INSTRUCTIN_ERROR);
+		printk("VMfailValid: error code %d\n", r);
 		return r;
 	}
+
+	return 0;
+}
+
+static inline int vmcs_load(struct vmcs *vmcs)
+{
+	uintptr_t physical_addr = __pa(vmcs);
+	int r = 0;
+
+	asm volatile("vmptrld %0" ::"m"(physical_addr));
+
+	r = check_vmoperation_result();
 
 	return r;
 }
@@ -162,26 +168,10 @@ static inline int vmcs_clear(struct vmcs *vmcs)
 {
 	uintptr_t physical_addr = __pa(vmcs);
 	int r = 0;
-	uint64_t rflags;
 
 	asm volatile("vmclear %0" ::"m"(physical_addr));
 
-	asm volatile("pushfq\n\t"
-		     "pop %0"
-		     : "=g"(rflags));
-
-	r = rflags & X86_EFLAGS_CF;
-	if (r) {
-		printk("VMfailnvalid\n");
-		return r;
-	}
-
-	r = rflags & X86_EFLAGS_ZF;
-	if (r) {
-		printk("VMfailValid\n");
-		// TODO read a error number. a detail of the error number is in Section 30.4 of SDM vol3.
-		return r;
-	}
+	r = check_vmoperation_result();
 
 	return r;
 }
@@ -190,29 +180,25 @@ static inline uint64_t vmcs_read(enum vmcs_field_encoding encoding)
 {
 	unsigned long value;
 	unsigned long field = encoding;
-	uint64_t rflags;
+	int r;
 
 	asm volatile("vmread %1, %0" : "=r"(value) : "r"(field));
 
-	asm volatile("pushfq\n\t"
-		     "pop %0"
-		     : "=g"(rflags));
-	printk("vr rflags 0x%llx\n", rflags);
+	r = check_vmoperation_result();
+
 	return value;
 }
 
-static void vmcs_write(enum vmcs_field_encoding encoding, uint64_t value)
+static int vmcs_write(enum vmcs_field_encoding encoding, uint64_t value)
 {
 	unsigned long field = encoding;
-	uint64_t rflags, result;
+	int r;
+
 	asm volatile("vmwrite %1, %0" ::"r"(field), "r"(value));
 
-	asm volatile("pushfq\n\t"
-		     "pop %0"
-		     : "=g"(rflags));
-	printk("rflags 0x%llx\n", rflags);
-	result = vmcs_read(VM_INSTRUCTIN_ERROR);
-	printk("vm instruction error %d\n", (uint32_t)value);
+	r = check_vmoperation_result();
+
+	return r;
 }
 
 static void adjust_vmx_control(const uint32_t msr,
@@ -223,7 +209,9 @@ static void adjust_vmx_control(const uint32_t msr,
 	rdmsr(msr, lower, upper);
 	flags &= upper;
 	flags |= lower;
+
 	printk("0x%08x 0x%08x 0x%08llx\n", upper, lower, flags);
+
 	vmcs_write(dest, flags);
 }
 
@@ -234,7 +222,6 @@ static int setup_vmcs(struct vmcs *vmcs)
 	struct desc_ptr dt;
 	uint64_t msr;
 	struct page *page;
-	//void *gdt;
 	uintptr_t host_rsp;
 	int cpu;
 
@@ -261,7 +248,6 @@ static int setup_vmcs(struct vmcs *vmcs)
 	vmcs_write(GUEST_IDTR_BASE, dt.address);
 	vmcs_write(GUEST_IDTR_LIMIT, dt.size);
 
-	//gdt = get_current_gdt_ro();
 	native_store_gdt(&dt);
 	printk("write gdtr\n");
 	vmcs_write(HOST_GDTR_BASE, dt.address);
@@ -340,7 +326,6 @@ static int setup_vmcs(struct vmcs *vmcs)
 
 	rdmsrl(MSR_IA32_DEBUGCTLMSR, msr);
 	vmcs_write(GUEST_IA32_DEBUGCTL_FULL, msr);
-	//vmcs_write(GUEST_IA32_DEBUGCTL_FULL, msr & 0xffffffff); vmcs_write(GUEST_IA32_DEBUGCTL_HIGH, msr >> 32);
 
 	printk("vw GUEST_INTERRUPTIBILITY_STATE\n");
 	vmcs_write(GUEST_INTERRUPTIBILITY_STATE, 0);
@@ -356,8 +341,8 @@ static int setup_vmcs(struct vmcs *vmcs)
 			   PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS,
 			   CPU_BASED_EXEC_HLT_EXIT);
 	printk("vw PIN_BASED\n");
-	adjust_vmx_control(MSR_IA32_VMX_PINBASED_CTLS,
-			   PIN_BASED_VM_EXEC_CONTROLS, 0);
+	r = adjust_vmx_control(MSR_IA32_VMX_PINBASED_CTLS,
+			       PIN_BASED_VM_EXEC_CONTROLS, 0);
 
 	preempt_enable();
 	return r;
@@ -367,39 +352,63 @@ int vmx_setup(void)
 {
 	int r = 0;
 	int cpu;
-	//struct vmcs *vmxon_region_pa, *vmxon_region_va;
 
 	for_each_possible_cpu (cpu) {
 		struct vmcs *vmcs;
 
 		vmcs = alloc_vmcs_region(cpu);
+		if (vmcs == NULL) {
+			goto fail;
+		}
 		per_cpu(vmxon_region, cpu) = vmcs;
 	}
 
-	/*
-    cpu = raw_smp_processor_id();
-    vmxon_region_va = per_cpu(vmxon_region, cpu);
-	if (vmxon_region_va == NULL) {
+	return r;
+fail:
+	vmx_tear_down();
+	return -1;
+}
+
+static bool is_vmxon = false;
+static int vmxon_cpu = -1;
+
+int vmx_run(void)
+{
+	int r = 0;
+	uint64_t rflags;
+	uint64_t value;
+	int cpu;
+	uintptr_t vmxon_region_pa, vmxon_region_va;
+
+	if (is_vmxon) {
+		r = -1;
+		goto fail;
+	}
+
+	cpu = raw_smp_processor_id();
+	vmxon_region_va = (uintptr_t)per_cpu(vmxon_region, cpu);
+	if ((struct vmcs *)vmxon_region_va == NULL) {
 		printk("why??\n");
-		return -1;
+		r = -2;
+		goto fail;
 	}
 
-    vmxon_region_pa = (uintptr_t)__pa(vmxon_region_va);
-	//vmxon_region = alloc_vmcs_region(cpu);
-	if (vmxon_region_pa == NULL) {
-		return -1;
+	vmxon_region_pa = (uintptr_t)__pa(vmxon_region_va);
+	if ((struct vmcs *)vmxon_region_pa == NULL) {
+		r = -1;
+		goto fail;
 	}
 
-	//r = vmxon(__pa(vmxon_region));
 	r = vmxon((uint64_t)vmxon_region_pa);
 	if (r) {
 		printk("faild to vmxon\n");
-		return -1;
+		goto fail;
 	}
+	is_vmxon = true;
+	vmxon_cpu = cpu;
+	printk("vmxon_cpu: %d\n", vmxon_cpu);
 	printk("success to execute the vmxon\n");
-    */
 
-	/*
 	vmcs_region = alloc_vmcs_region(cpu);
 	if (vmcs_region == NULL) {
 		printk("failed allocate a vmcs region\n");
@@ -411,80 +420,14 @@ int vmx_setup(void)
 		printk("failed to execute the vmclear");
 		return -1;
 	}
-    printk("success to execute the vmclear\n");
+	printk("success to execute the vmclear\n");
 
 	r = vmcs_load(vmcs_region);
 	if (r) {
 		printk("failed to execute the vmptrld");
 		return -1;
 	}
-    printk("success to execute the vmptrload\n");
-    */
-
-	return r;
-}
-
-static bool is_vmxon = false;
-static int vmxon_cpu = -1;
-
-int vmx_run(void)
-{
-	int r = 0;
-	//uint64_t rflags; uint64_t value;
-	int cpu;
-	struct vmcs *vmxon_region_pa, *vmxon_region_va;
-
-    if(is_vmxon)
-    {
-        r = -1;
-        goto fail;
-    }
-
-	cpu = raw_smp_processor_id();
-	vmxon_region_va = per_cpu(vmxon_region, cpu);
-	if (vmxon_region_va == NULL) {
-		printk("why??\n");
-		r = -2;
-		goto fail;
-	}
-
-	vmxon_region_pa = (uintptr_t)__pa(vmxon_region_va);
-	//vmxon_region = alloc_vmcs_region(cpu);
-	if (vmxon_region_pa == NULL) {
-		r = -1;
-		goto fail;
-	}
-
-	//r = vmxon(__pa(vmxon_region));
-	r = vmxon((uint64_t)vmxon_region_pa);
-	if (r) {
-		printk("faild to vmxon\n");
-		goto fail;
-	}
-	is_vmxon = true;
-	vmxon_cpu = cpu;
-	printk("vmxon_cpu: %d\n", vmxon_cpu);
-	printk("success to execute the vmxon\n");
-
-    vmcs_region = alloc_vmcs_region(cpu);
-	if (vmcs_region == NULL) {
-		printk("failed allocate a vmcs region\n");
-		return -1;
-	}
-
-	r = vmcs_clear(vmcs_region);
-	if (r) {
-		printk("failed to execute the vmclear");
-		return -1;
-	}
-    printk("success to execute the vmclear\n");
-
-	r = vmcs_load(vmcs_region);
-	if (r) {
-		printk("failed to execute the vmptrld");
-		return -1;
-	}
-    printk("success to execute the vmptrload\n");
+	printk("success to execute the vmptrload\n");
 
 	// TODO alloc vmcs_region
 	r = setup_vmcs(vmcs_region);
@@ -493,58 +436,46 @@ int vmx_run(void)
 		goto fail;
 	}
 
-	/*
 	printk("vmlaunch\n");
 	asm volatile("vmlaunch");
-
-	asm volatile("pushfq\n\t"
-		     "pop %0"
-		     : "=g"(rflags));
-	printk("rflags 0x%llx\n", rflags);
-	value = vmcs_read(VM_INSTRUCTIN_ERROR);
-	printk("vm instruction error %d\n", (uint32_t)value);
-	printk("failed to execute the vmlaunch instruction\n");
-	r = value;
-    */
-	return 0;
+	r = check_vmoperation_result();
 
 fail:
 	return r;
 }
 
-static void check_and_vmxoff(void* babble)
+static void check_and_vmxoff(void *babble)
 {
-    int cpu = raw_smp_processor_id();
-    if(vmxon_cpu == cpu)
-    {
-        if (vmcs_region != NULL) {
-            printk("vmclar and free the vmcs_region\n");
-            vmcs_clear(vmcs_region);
-            __free_page(virt_to_page(vmcs_region));
-            vmcs_region = NULL;
-        }
+	int cpu = raw_smp_processor_id();
+	if (vmxon_cpu == cpu) {
+		if (vmcs_region != NULL) {
+			printk("vmclar and free the vmcs_region\n");
+			vmcs_clear(vmcs_region);
+			__free_page(virt_to_page(vmcs_region));
+			vmcs_region = NULL;
+		}
 
-        printk("cpu %d: vmxoff\n", cpu);
-        vmxoff();
-        is_vmxon = false;
-    }
+		printk("cpu %d: vmxoff\n", cpu);
+		vmxoff();
+		is_vmxon = false;
+	}
 }
 
 void vmx_tear_down(void)
 {
 	int cpu;
+	struct vmcs *vmcs;
 
-    on_each_cpu(check_and_vmxoff, NULL, 1);
+	on_each_cpu(check_and_vmxoff, NULL, 1);
 
 	for_each_possible_cpu (cpu) {
 		printk("cpu: %d\n", cpu);
-		struct vmcs *vmcs;
 
 		vmcs = per_cpu(vmxon_region, cpu);
 		if (vmcs != NULL) {
-            printk("free the vmxon_region\n");
+			printk("free the vmxon_region\n");
 			__free_page(virt_to_page(vmcs));
-            vmcs = NULL;
+			vmcs = NULL;
 		}
 	}
 
