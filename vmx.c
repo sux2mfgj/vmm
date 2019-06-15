@@ -433,9 +433,10 @@ int vmx_run(void)
 	r = setup_vmcs(vmcs_region);
 	if (r) {
 		printk("failed to setup the vmcs region");
-		return -1;
+		goto fail;
 	}
 
+    /*
 	printk("vmlaunch\n");
 	asm volatile("vmlaunch");
 
@@ -447,8 +448,11 @@ int vmx_run(void)
 	printk("vm instruction error %d\n", (uint32_t)value);
 	printk("failed to execute the vmlaunch instruction\n");
 	r = value;
+    */
+    return 0;
 
-	return r;
+fail:
+    return r;
 }
 
 void vmx_tear_down(void)

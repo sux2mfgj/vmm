@@ -12,8 +12,6 @@ MODULE_AUTHOR("Shunsuke Mie <sux2mfgj@gmail.com>");
 #define DEVICE_NAME "kvm"
 #define CLASS_NAME "vmm"
 
-#define VMM_DEBUG   _IO(KVMIO, 0x80)
-
 
 static int majorNumber;
 static struct class *vmm_class = NULL;
@@ -25,7 +23,8 @@ static long vmm_dev_ioctl(struct file* filep, unsigned int ioctl, unsigned long 
     switch(ioctl)
     {
         case VMM_DEBUG:
-            r = 0;
+            r = vmx_run();
+            // TODO
             break;
 
         default:

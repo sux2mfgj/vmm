@@ -7,6 +7,7 @@
 
 #include "vmx.h"
 #include "config.h"
+#include "vmm_debug.h"
 
 enum mp_state {
 	MP_UNINITIALIZED = 0,
@@ -378,6 +379,8 @@ struct vm {
 
 int vmx_setup(void);
 void vmx_tear_down(void);
+
+int vmx_run(void);
 
 long vmm_dev_ioctl_create_vm(unsigned long arg);
 

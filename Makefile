@@ -19,6 +19,9 @@ install: build
 uninstall:
 	sudo rmmod vmm
 
+debug: debug.c vmm_debug.h
+	$(CC) $< -o $@
+
 .PHONY:
 clean:
 	make -C $(BUILD_PATH) M=$(shell pwd) clean
