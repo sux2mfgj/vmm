@@ -12,12 +12,32 @@ MODULE_AUTHOR("Shunsuke Mie <sux2mfgj@gmail.com>");
 #define DEVICE_NAME "kvm"
 #define CLASS_NAME "vmm"
 
+#define VMM_DEBUG   _IO(KVMIO, 0x80)
+
+
 static int majorNumber;
 static struct class *vmm_class = NULL;
 static struct device *vmm_device = NULL;
 
+static long vmm_dev_ioctl(struct file* filep, unsigned int ioctl, unsigned long arg)
+{
+    long r = -EINVAL;
+    switch(ioctl)
+    {
+        case VMM_DEBUG:
+            r = 0;
+            break;
+
+        default:
+            printk("not yet implemented\n");
+            break;
+    }
+
+    return r;
+}
+
 static struct file_operations vmm_fops = {
-	//.unlocked_ioctl = vmm_dev_ioctl
+	.unlocked_ioctl = vmm_dev_ioctl
 };
 
 static int register_device(void)
