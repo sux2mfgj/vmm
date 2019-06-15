@@ -25,4 +25,5 @@ debug: debug.c vmm_debug.h
 .PHONY:
 clean:
 	make -C $(BUILD_PATH) M=$(shell pwd) clean
+	rm -rf debug
 

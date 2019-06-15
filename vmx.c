@@ -434,6 +434,12 @@ int vmx_run(void)
 	int cpu;
 	struct vmcs *vmxon_region_pa, *vmxon_region_va;
 
+    if(is_vmxon)
+    {
+        r = -1;
+        goto fail;
+    }
+
 	cpu = raw_smp_processor_id();
 	vmxon_region_va = per_cpu(vmxon_region, cpu);
 	if (vmxon_region_va == NULL) {
