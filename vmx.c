@@ -21,7 +21,7 @@ struct vmcs {
 	struct vmcs_header header;
 	uint32_t vmx_abort_indicator;
 	//uint32_t data;
-    char data[0];
+	char data[0];
 };
 
 struct test_vm {
@@ -30,7 +30,9 @@ struct test_vm {
 	size_t size;
 };
 
-static struct vmcs *vmxon_region = NULL;
+static DEFINE_PER_CPU(struct vmcs *, vmxon_region);
+
+//static struct vmcs *vmxon_region = NULL;
 static struct vmcs *vmcs_region = NULL;
 
 static struct test_vm vm;
@@ -90,7 +92,7 @@ static int vmxon(uint64_t address)
 		     : "=g"(rflags));
 	printk("rflags 0x%llx\n", rflags);
 	is_error = rflags & X86_EFLAGS_CF;
-    is_error2 = rflags & X86_EFLAGS_ZF;
+	is_error2 = rflags & X86_EFLAGS_ZF;
 
 	return is_error | is_error2;
 }
@@ -103,17 +105,20 @@ static int vmxoff(void)
 	return 0;
 }
 
-static struct vmcs *alloc_vmcs_region(void)
+static struct vmcs *alloc_vmcs_region(int cpu)
 {
 	struct vmcs *vmcs;
 	struct page *page;
 	uint32_t vmx_msr_low, vmx_msr_high;
 	size_t vmcs_size;
 
+    int node = cpu_to_node(cpu);
+
 	rdmsr(MSR_IA32_VMX_BASIC, vmx_msr_low, vmx_msr_high);
 	vmcs_size = vmx_msr_high & 0x1ffff;
 
-	page = alloc_page(GFP_KERNEL);
+	//page = alloc_page(GFP_KERNEL);
+    page = __alloc_pages_node(node, GFP_KERNEL, 0);
 	if (!page) {
 		return NULL;
 	}
@@ -185,11 +190,11 @@ static inline uint64_t vmcs_read(enum vmcs_field_encoding encoding)
 {
 	unsigned long value;
 	unsigned long field = encoding;
-    uint64_t rflags;
+	uint64_t rflags;
 
 	asm volatile("vmread %1, %0" : "=r"(value) : "r"(field));
 
-    asm volatile("pushfq\n\t"
+	asm volatile("pushfq\n\t"
 		     "pop %0"
 		     : "=g"(rflags));
 	printk("vr rflags 0x%llx\n", rflags);
@@ -211,8 +216,8 @@ static void vmcs_write(enum vmcs_field_encoding encoding, uint64_t value)
 }
 
 static void adjust_vmx_control(const uint32_t msr,
-			      const enum vmcs_field_encoding dest,
-			      uint64_t flags)
+			       const enum vmcs_field_encoding dest,
+			       uint64_t flags)
 {
 	uint32_t lower, upper;
 	rdmsr(msr, lower, upper);
@@ -230,35 +235,35 @@ static int setup_vmcs(struct vmcs *vmcs)
 	uint64_t msr;
 	struct page *page;
 	//void *gdt;
-    uintptr_t host_rsp;
-    int cpu;
+	uintptr_t host_rsp;
+	int cpu;
 
-    preempt_disable();
+	preempt_disable();
 
 	cr0 = read_cr0();
-    printk("write cr0: %08llx\n", cr0);
+	printk("write cr0: %08llx\n", cr0);
 	vmcs_write(HOST_CR0, cr0);
-    vmcs_write(GUEST_CR0, cr0);
+	vmcs_write(GUEST_CR0, cr0);
 
 	cr3 = __read_cr3();
-    printk("write cr3: %08llx\n", cr3);
+	printk("write cr3: %08llx\n", cr3);
 	vmcs_write(HOST_CR3, cr3);
-    vmcs_write(GUEST_CR3, cr3);
+	vmcs_write(GUEST_CR3, cr3);
 
 	asm volatile("movq %%cr4, %0" : "=r"(cr4));
-    printk("write cr4\n");
+	printk("write cr4\n");
 	vmcs_write(HOST_CR4, cr4);
-    vmcs_write(GUEST_CR4, cr4);
+	vmcs_write(GUEST_CR4, cr4);
 
 	store_idt(&dt);
-    printk("write idtr\n");
+	printk("write idtr\n");
 	vmcs_write(HOST_IDTR_BASE, dt.address);
-    vmcs_write(GUEST_IDTR_BASE, dt.address);
-    vmcs_write(GUEST_IDTR_LIMIT, dt.size);
+	vmcs_write(GUEST_IDTR_BASE, dt.address);
+	vmcs_write(GUEST_IDTR_LIMIT, dt.size);
 
 	//gdt = get_current_gdt_ro();
 	native_store_gdt(&dt);
-    printk("write gdtr\n");
+	printk("write gdtr\n");
 	vmcs_write(HOST_GDTR_BASE, dt.address);
 	vmcs_write(GUEST_GDTR_BASE, dt.address);
 	vmcs_write(GUEST_GDTR_LIMIT, dt.size);
@@ -270,11 +275,11 @@ static int setup_vmcs(struct vmcs *vmcs)
 	host_rsp = (uintptr_t)page_address(page) + 0x1000 - 1;
 
 	vmcs_write(HOST_RIP, (uintptr_t)vm_exit_guest);
-    printk("write host rip\n");
+	printk("write host rip\n");
 	vmcs_write(HOST_RSP, host_rsp);
-    printk("write host rsp\n");
+	printk("write host rsp\n");
 
-    page = alloc_page(GFP_KERNEL);
+	page = alloc_page(GFP_KERNEL);
 	if (!page) {
 		return -1;
 	}
@@ -284,7 +289,7 @@ static int setup_vmcs(struct vmcs *vmcs)
 	vmcs_write(GUEST_RIP, vm.rip);
 	vmcs_write(GUEST_RSP, vm.stack);
 
-    vmcs_write(VMCS_LINK_POINTER_FULL, -1ull);
+	vmcs_write(VMCS_LINK_POINTER_FULL, -1ull);
 
 	rdmsrl(MSR_IA32_SYSENTER_CS, msr);
 	vmcs_write(HOST_IA32_SYSENTER_CS, msr);
@@ -298,43 +303,44 @@ static int setup_vmcs(struct vmcs *vmcs)
 	vmcs_write(HOST_IA32_SYSENTER_ESP, msr);
 	vmcs_write(GUEST_IA32_SYSENTER_ESP, msr);
 
-    vmcs_write(HOST_CS_SELECTOR, __KERNEL_CS);
-    vmcs_write(GUEST_CS_SELECTOR, __KERNEL_CS);
-    vmcs_write(HOST_DS_SELECTOR, 0);
-    vmcs_write(GUEST_DS_SELECTOR, 0);
-    vmcs_write(HOST_ES_SELECTOR, 0);
-    vmcs_write(GUEST_ES_SELECTOR, 0);
-    vmcs_write(HOST_SS_SELECTOR, __KERNEL_CS);
-    vmcs_write(GUEST_SS_SELECTOR, __KERNEL_CS);
-    vmcs_write(HOST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
-    vmcs_write(GUEST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
-    vmcs_write(HOST_GS_SELECTOR, 0);
-    vmcs_write(GUEST_GS_SELECTOR, 0);
+	vmcs_write(HOST_CS_SELECTOR, __KERNEL_CS);
+	vmcs_write(GUEST_CS_SELECTOR, __KERNEL_CS);
+	vmcs_write(HOST_DS_SELECTOR, 0);
+	vmcs_write(GUEST_DS_SELECTOR, 0);
+	vmcs_write(HOST_ES_SELECTOR, 0);
+	vmcs_write(GUEST_ES_SELECTOR, 0);
+	vmcs_write(HOST_SS_SELECTOR, __KERNEL_CS);
+	vmcs_write(GUEST_SS_SELECTOR, __KERNEL_CS);
+	vmcs_write(HOST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
+	vmcs_write(GUEST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
+	vmcs_write(HOST_GS_SELECTOR, 0);
+	vmcs_write(GUEST_GS_SELECTOR, 0);
 
-    cpu = get_cpu();
-    vmcs_write(HOST_TR_BASE, (unsigned long)&get_cpu_entry_area(cpu)->tss.x86_tss);
+	cpu = get_cpu();
+	vmcs_write(HOST_TR_BASE,
+		   (unsigned long)&get_cpu_entry_area(cpu)->tss.x86_tss);
 
-    vmcs_write(GUEST_DR7, 0x400);
+	vmcs_write(GUEST_DR7, 0x400);
 
-    asm volatile("pushfq\n\t"
+	asm volatile("pushfq\n\t"
 		     "pop %0"
 		     : "=g"(rflags));
-    vmcs_write(GUEST_RFLAGS, rflags);
+	vmcs_write(GUEST_RFLAGS, rflags);
 
-    vmcs_write(TSC_OFFSET_FULL, 0);
+	vmcs_write(TSC_OFFSET_FULL, 0);
 
-    vmcs_write(PAGE_FAULT_ERROR_CODE_MASK, 0);
-    vmcs_write(PAGE_FAULT_ERROR_CODE_MATCH, 0);
+	vmcs_write(PAGE_FAULT_ERROR_CODE_MASK, 0);
+	vmcs_write(PAGE_FAULT_ERROR_CODE_MATCH, 0);
 
-    vmcs_write(VM_EXIT_MSR_STORE_COUNT, 0);
-    vmcs_write(VM_EXIT_MSR_LOAD_COUNT, 0);
+	vmcs_write(VM_EXIT_MSR_STORE_COUNT, 0);
+	vmcs_write(VM_EXIT_MSR_LOAD_COUNT, 0);
 
-    vmcs_write(VM_ENTRY_MSR_LOAD_COUNT, 0);
-    vmcs_write(VM_ENTRY_INTERRUPTION_INFO_FIELD, 0);
+	vmcs_write(VM_ENTRY_MSR_LOAD_COUNT, 0);
+	vmcs_write(VM_ENTRY_INTERRUPTION_INFO_FIELD, 0);
 
-    rdmsrl(MSR_IA32_DEBUGCTLMSR, msr);
-    vmcs_write(GUEST_IA32_DEBUGCTL_FULL, msr);
-    //vmcs_write(GUEST_IA32_DEBUGCTL_FULL, msr & 0xffffffff); vmcs_write(GUEST_IA32_DEBUGCTL_HIGH, msr >> 32);
+	rdmsrl(MSR_IA32_DEBUGCTLMSR, msr);
+	vmcs_write(GUEST_IA32_DEBUGCTL_FULL, msr);
+	//vmcs_write(GUEST_IA32_DEBUGCTL_FULL, msr & 0xffffffff); vmcs_write(GUEST_IA32_DEBUGCTL_HIGH, msr >> 32);
 
 	printk("vw GUEST_INTERRUPTIBILITY_STATE\n");
 	vmcs_write(GUEST_INTERRUPTIBILITY_STATE, 0);
@@ -343,42 +349,58 @@ static int setup_vmcs(struct vmcs *vmcs)
 	printk("vw VM_ENTRY_CONTROLS\n");
 	adjust_vmx_control(MSR_IA32_VMX_ENTRY_CTLS, VM_ENTRY_CONTROLS,
 			   VM_ENTRY_CTRL_IA32e_MODE_GUEST);
-    printk("vw VM_EXIT_CONTROLS\n");
+	printk("vw VM_EXIT_CONTROLS\n");
 	adjust_vmx_control(MSR_IA32_VMX_EXIT_CTLS, VM_EXIT_CONTROLS, 0);
-    printk("vw PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS\n");
+	printk("vw PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS\n");
 	adjust_vmx_control(MSR_IA32_VMX_PROCBASED_CTLS,
 			   PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS,
 			   CPU_BASED_EXEC_HLT_EXIT);
-    printk("vw PIN_BASED\n");
+	printk("vw PIN_BASED\n");
 	adjust_vmx_control(MSR_IA32_VMX_PINBASED_CTLS,
 			   PIN_BASED_VM_EXEC_CONTROLS, 0);
 
-    preempt_enable();
+	preempt_enable();
 	return r;
 }
 
 int vmx_setup(void)
 {
 	int r = 0;
-	uint64_t rflags;
-	uint64_t value;
+	int cpu;
+    struct vmcs *vmxon_region_pa, *vmxon_region_va;
 
-	if (vmxon_region != NULL) {
+	for_each_possible_cpu (cpu) {
+        struct vmcs* vmcs;
+
+        vmcs = alloc_vmcs_region(cpu);
+        per_cpu(vmxon_region, cpu) = vmcs;
+	}
+
+    /*
+    cpu = raw_smp_processor_id();
+    vmxon_region_va = per_cpu(vmxon_region, cpu);
+	if (vmxon_region_va == NULL) {
 		printk("why??\n");
 		return -1;
 	}
-	vmxon_region = alloc_vmcs_region();
-	if (vmxon_region == NULL) {
+
+    vmxon_region_pa = (uintptr_t)__pa(vmxon_region_va);
+	//vmxon_region = alloc_vmcs_region(cpu);
+	if (vmxon_region_pa == NULL) {
 		return -1;
 	}
 
-	r = vmxon(__pa(vmxon_region));
+	//r = vmxon(__pa(vmxon_region));
+	r = vmxon((uint64_t)vmxon_region_pa);
 	if (r) {
 		printk("faild to vmxon\n");
 		return -1;
 	}
+	printk("success to execute the vmxon\n");
+    */
 
-	vmcs_region = alloc_vmcs_region();
+	/*
+	vmcs_region = alloc_vmcs_region(cpu);
 	if (vmcs_region == NULL) {
 		printk("failed allocate a vmcs region\n");
 		return -1;
@@ -389,14 +411,25 @@ int vmx_setup(void)
 		printk("failed to execute the vmclear");
 		return -1;
 	}
+    printk("success to execute the vmclear\n");
 
 	r = vmcs_load(vmcs_region);
 	if (r) {
 		printk("failed to execute the vmptrld");
 		return -1;
 	}
+    printk("success to execute the vmptrload\n");
+    */
 
-    /*
+	return r;
+}
+
+int vmx_run(void)
+{
+	int r = 0;
+	uint64_t rflags;
+	uint64_t value;
+
 	r = setup_vmcs(vmcs_region);
 	if (r) {
 		printk("failed to setup the vmcs region");
@@ -413,24 +446,31 @@ int vmx_setup(void)
 	value = vmcs_read(VM_INSTRUCTIN_ERROR);
 	printk("vm instruction error %d\n", (uint32_t)value);
 	printk("failed to execute the vmlaunch instruction\n");
-    r = value;
-    */
+	r = value;
 
 	return r;
 }
 
 void vmx_tear_down(void)
 {
+    int cpu;
 	if (vmcs_region != NULL) {
 		vmcs_clear(vmcs_region);
 		__free_page(virt_to_page(vmcs_region));
 		printk("vmclar and free the vmcs_region\n");
 	}
 
-	if (vmxon_region != NULL) {
-		vmxoff();
-		__free_page(virt_to_page(vmxon_region));
-		printk("vmxoff and free the vmxon_region\n");
+    for_each_possible_cpu (cpu) {
+        struct vmcs* vmcs;
+
+        vmcs = per_cpu(vmxon_region, cpu);
+        if(vmcs != NULL)
+        {
+            //TODO check
+            //vmxoff();
+            __free_page(virt_to_page(vmcs));
+            printk("vmxoff and free the vmxon_region\n");
+        }
 	}
 
 	printk("bye\n");
@@ -439,6 +479,7 @@ void vmx_tear_down(void)
 void vm_exit_handler(uintptr_t guest_regs_ptr)
 {
 	printk("handling the vm exit\n");
-    while(true){}
+	while (true) {
+	}
 	return;
 }
