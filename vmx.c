@@ -367,7 +367,7 @@ int vmx_setup(void)
 {
 	int r = 0;
 	int cpu;
-    struct vmcs *vmxon_region_pa, *vmxon_region_va;
+    //struct vmcs *vmxon_region_pa, *vmxon_region_va;
 
 	for_each_possible_cpu (cpu) {
         struct vmcs* vmcs;
@@ -424,17 +424,47 @@ int vmx_setup(void)
 	return r;
 }
 
+static bool is_vmxon = false;
+static int vmxon_cpu = -1;
+
 int vmx_run(void)
 {
 	int r = 0;
-	uint64_t rflags;
-	uint64_t value;
+	//uint64_t rflags; uint64_t value;
+    int cpu;
+    struct vmcs *vmxon_region_pa, *vmxon_region_va;
 
-	r = setup_vmcs(vmcs_region);
+    cpu = raw_smp_processor_id();
+    vmxon_region_va = per_cpu(vmxon_region, cpu);
+	if (vmxon_region_va == NULL) {
+		printk("why??\n");
+		r = -2;
+        goto fail;
+	}
+
+    vmxon_region_pa = (uintptr_t)__pa(vmxon_region_va);
+	//vmxon_region = alloc_vmcs_region(cpu);
+	if (vmxon_region_pa == NULL) {
+		r = -1;
+        goto fail;
+	}
+
+	//r = vmxon(__pa(vmxon_region));
+	r = vmxon((uint64_t)vmxon_region_pa);
 	if (r) {
-		printk("failed to setup the vmcs region");
+		printk("faild to vmxon\n");
 		goto fail;
 	}
+    is_vmxon = true;
+    vmxon_cpu = cpu;
+	printk("success to execute the vmxon\n");
+
+    // TODO alloc vmcs_region
+	//r = setup_vmcs(vmcs_region);
+	//if (r) {
+	//	printk("failed to setup the vmcs region");
+	//	goto fail;
+	//}
 
     /*
 	printk("vmlaunch\n");
@@ -470,8 +500,10 @@ void vmx_tear_down(void)
         vmcs = per_cpu(vmxon_region, cpu);
         if(vmcs != NULL)
         {
-            //TODO check
-            //vmxoff();
+            if(cpu == vmxon_cpu && is_vmxon)
+            {
+                vmxoff();
+            }
             __free_page(virt_to_page(vmcs));
             printk("vmxoff and free the vmxon_region\n");
         }
