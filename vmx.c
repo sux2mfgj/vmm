@@ -231,6 +231,7 @@ static int setup_vmcs(struct vmcs *vmcs)
 	struct page *page;
 	//void *gdt;
     uintptr_t host_rsp;
+    int cpu;
 
     preempt_disable();
 
@@ -273,7 +274,6 @@ static int setup_vmcs(struct vmcs *vmcs)
 	vmcs_write(HOST_RSP, host_rsp);
     printk("write host rsp\n");
 
-
     page = alloc_page(GFP_KERNEL);
 	if (!page) {
 		return -1;
@@ -281,11 +281,10 @@ static int setup_vmcs(struct vmcs *vmcs)
 
 	vm.rip = (uintptr_t)test_guest_rip;
 	vm.stack = (uintptr_t)page_address(page) + 0x1000 - 1;
-
-    vmcs_write(VMCS_LINK_POINTER_FULL, -1ull);
-
 	vmcs_write(GUEST_RIP, vm.rip);
 	vmcs_write(GUEST_RSP, vm.stack);
+
+    vmcs_write(VMCS_LINK_POINTER_FULL, -1ull);
 
 	rdmsrl(MSR_IA32_SYSENTER_CS, msr);
 	vmcs_write(HOST_IA32_SYSENTER_CS, msr);
@@ -299,29 +298,21 @@ static int setup_vmcs(struct vmcs *vmcs)
 	vmcs_write(HOST_IA32_SYSENTER_ESP, msr);
 	vmcs_write(GUEST_IA32_SYSENTER_ESP, msr);
 
-	rdmsrl(MSR_IA32_SYSENTER_EIP, msr);
-	vmcs_write(HOST_IA32_SYSENTER_EIP, msr);
-	vmcs_write(GUEST_IA32_SYSENTER_EIP, msr);
-
-	vmcs_write(HOST_CS_SELECTOR, __KERNEL_CS);
-	vmcs_write(HOST_DS_SELECTOR, __KERNEL_DS);
-	vmcs_write(HOST_ES_SELECTOR, __KERNEL_DS);
-	vmcs_write(HOST_SS_SELECTOR, __KERNEL_DS);
-	vmcs_write(HOST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
-    vmcs_write(HOST_FS_SELECTOR, 0);
+    vmcs_write(HOST_CS_SELECTOR, __KERNEL_CS);
+    vmcs_write(GUEST_CS_SELECTOR, __KERNEL_CS);
+    vmcs_write(HOST_DS_SELECTOR, 0);
+    vmcs_write(GUEST_DS_SELECTOR, 0);
+    vmcs_write(HOST_ES_SELECTOR, 0);
+    vmcs_write(GUEST_ES_SELECTOR, 0);
+    vmcs_write(HOST_SS_SELECTOR, __KERNEL_CS);
+    vmcs_write(GUEST_SS_SELECTOR, __KERNEL_CS);
+    vmcs_write(HOST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
+    vmcs_write(GUEST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
     vmcs_write(HOST_GS_SELECTOR, 0);
-    vmcs_write(HOST_FS_BASE, 0);
-    vmcs_write(HOST_GS_BASE, 0);
-
-	vmcs_write(GUEST_CS_SELECTOR, __KERNEL_CS);
-	vmcs_write(GUEST_DS_SELECTOR, __KERNEL_DS);
-	vmcs_write(GUEST_ES_SELECTOR, __KERNEL_DS);
-	vmcs_write(GUEST_SS_SELECTOR, __KERNEL_DS);
-	vmcs_write(GUEST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
-    vmcs_write(GUEST_FS_SELECTOR, 0);
     vmcs_write(GUEST_GS_SELECTOR, 0);
-    vmcs_write(GUEST_FS_BASE, 0);
-    vmcs_write(GUEST_GS_BASE, 0);
+
+    cpu = get_cpu();
+    vmcs_write(HOST_TR_BASE, (unsigned long)&get_cpu_entry_area(cpu)->tss.x86_tss);
 
     vmcs_write(GUEST_DR7, 0x400);
 
@@ -331,7 +322,6 @@ static int setup_vmcs(struct vmcs *vmcs)
     vmcs_write(GUEST_RFLAGS, rflags);
 
     vmcs_write(TSC_OFFSET_FULL, 0);
-    //vmcs_write(TSC_OFFSET_HIGH, 0);
 
     vmcs_write(PAGE_FAULT_ERROR_CODE_MASK, 0);
     vmcs_write(PAGE_FAULT_ERROR_CODE_MATCH, 0);
@@ -406,6 +396,7 @@ int vmx_setup(void)
 		return -1;
 	}
 
+    /*
 	r = setup_vmcs(vmcs_region);
 	if (r) {
 		printk("failed to setup the vmcs region");
@@ -423,6 +414,7 @@ int vmx_setup(void)
 	printk("vm instruction error %d\n", (uint32_t)value);
 	printk("failed to execute the vmlaunch instruction\n");
     r = value;
+    */
 
 	return r;
 }

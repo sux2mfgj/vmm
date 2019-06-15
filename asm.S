@@ -33,6 +33,7 @@ ENTRY(vm_exit_guest)
 ENDPROC(vm_exit_guest)
 
 ENTRY(test_guest_rip)
+    pushq %r15
+    pushq %r14
     hlt
-    ret
 ENDPROC(test_guest_rip)
