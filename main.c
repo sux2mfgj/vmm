@@ -67,29 +67,32 @@ static void unregister_device(void)
 static int vmm_init(void)
 {
 	int r = 0;
-    //r = register_device();
+    r = register_device();
     if(r)
     {
         printk("failed register a device\n");
-        return r;
+        goto failed;
     }
 
 	r = vmx_setup();
 	if (r) {
         printk("failed to setup the intel VT-x\n");
-		vmx_tear_down();
-        //unregister_device();
-		return r;
+        goto failed_unreg;
 	}
 
     printk("ok\n");
 	return 0;
+
+failed_unreg:
+    unregister_device();
+failed:
+    return r;
 }
 
 static void vmm_exit(void)
 {
 	vmx_tear_down();
-    //unregister_device();
+    unregister_device();
     printk("bye\n");
 }
 
