@@ -460,12 +460,32 @@ int vmx_run(void)
 	printk("vmxon_cpu: %d\n", vmxon_cpu);
 	printk("success to execute the vmxon\n");
 
+    vmcs_region = alloc_vmcs_region(cpu);
+	if (vmcs_region == NULL) {
+		printk("failed allocate a vmcs region\n");
+		return -1;
+	}
+
+	r = vmcs_clear(vmcs_region);
+	if (r) {
+		printk("failed to execute the vmclear");
+		return -1;
+	}
+    printk("success to execute the vmclear\n");
+
+	r = vmcs_load(vmcs_region);
+	if (r) {
+		printk("failed to execute the vmptrld");
+		return -1;
+	}
+    printk("success to execute the vmptrload\n");
+
 	// TODO alloc vmcs_region
-	//r = setup_vmcs(vmcs_region);
-	//if (r) {
-	//	printk("failed to setup the vmcs region");
-	//	goto fail;
-	//}
+	r = setup_vmcs(vmcs_region);
+	if (r) {
+		printk("failed to setup the vmcs region");
+		goto fail;
+	}
 
 	/*
 	printk("vmlaunch\n");
@@ -491,6 +511,14 @@ static void check_and_vmxoff(void* babble)
     int cpu = raw_smp_processor_id();
     if(vmxon_cpu == cpu)
     {
+        if (vmcs_region != NULL) {
+            printk("vmclar and free the vmcs_region\n");
+            vmcs_clear(vmcs_region);
+            __free_page(virt_to_page(vmcs_region));
+            vmcs_region = NULL;
+        }
+
+        printk("cpu %d: vmxoff\n", cpu);
         vmxoff();
         is_vmxon = false;
     }
@@ -499,11 +527,6 @@ static void check_and_vmxoff(void* babble)
 void vmx_tear_down(void)
 {
 	int cpu;
-	if (vmcs_region != NULL) {
-		vmcs_clear(vmcs_region);
-		__free_page(virt_to_page(vmcs_region));
-		printk("vmclar and free the vmcs_region\n");
-	}
 
     on_each_cpu(check_and_vmxoff, NULL, 1);
 
