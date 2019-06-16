@@ -201,18 +201,21 @@ static int vmcs_write(enum vmcs_field_encoding encoding, uint64_t value)
 	return r;
 }
 
-static void adjust_vmx_control(const uint32_t msr,
+static int adjust_vmx_control(const uint32_t msr,
 			       const enum vmcs_field_encoding dest,
 			       uint64_t flags)
 {
 	uint32_t lower, upper;
+    int r;
+
 	rdmsr(msr, lower, upper);
 	flags &= upper;
 	flags |= lower;
 
 	printk("0x%08x 0x%08x 0x%08llx\n", upper, lower, flags);
 
-	vmcs_write(dest, flags);
+	r = vmcs_write(dest, flags);
+    return r;
 }
 
 static int setup_vmcs(struct vmcs *vmcs)
@@ -375,8 +378,6 @@ static int vmxon_cpu = -1;
 int vmx_run(void)
 {
 	int r = 0;
-	uint64_t rflags;
-	uint64_t value;
 	int cpu;
 	uintptr_t vmxon_region_pa, vmxon_region_va;
 
