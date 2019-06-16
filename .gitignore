@@ -55,3 +55,4 @@ tags
 vmlinuz-linux*
 
 debug
+*.ur-safe
