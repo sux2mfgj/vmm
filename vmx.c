@@ -96,10 +96,13 @@ static int vmxon(uint64_t address)
 
 static int vmxoff(void)
 {
+    int r;
+
 	asm volatile("vmxoff");
-	// TODO check a result of the vmxoff
-	// CF == 0 and ZF == 0
-	return 0;
+
+    r = check_vmoperation_result();
+
+	return r;
 }
 
 static struct vmcs *alloc_vmcs_region(int cpu)
@@ -275,8 +278,10 @@ static int setup_vmcs(struct vmcs *vmcs)
 
 	vm.rip = (uintptr_t)test_guest_rip;
 	vm.stack = (uintptr_t)page_address(page) + 0x1000 - 1;
-	vmcs_write(GUEST_RIP, vm.rip);
-	vmcs_write(GUEST_RSP, vm.stack);
+	//vmcs_write(GUEST_RIP, vm.rip);
+	//vmcs_write(GUEST_RSP, vm.stack);
+    vmcs_write(GUEST_RIP, NULL);
+    vmcs_write(GUEST_RSP, NULL);
 
 	vmcs_write(VMCS_LINK_POINTER_FULL, -1ull);
 
@@ -375,6 +380,22 @@ fail:
 static bool is_vmxon = false;
 static int vmxon_cpu = -1;
 
+static void vmx_launch(void* babble)
+{
+    int cpu;
+    if(!is_vmxon)
+    {
+        return;
+    }
+
+	cpu = raw_smp_processor_id();
+	if (vmxon_cpu == cpu) {
+        printk("vmlaunch: %d\n", cpu);
+        asm volatile("vmlaunch");
+        check_vmoperation_result();
+    }
+}
+
 int vmx_run(void)
 {
 	int r = 0;
@@ -430,7 +451,6 @@ int vmx_run(void)
 	}
 	printk("success to execute the vmptrload\n");
 
-	// TODO alloc vmcs_region
 	r = setup_vmcs(vmcs_region);
 	if (r) {
 		printk("failed to setup the vmcs region");
@@ -438,8 +458,12 @@ int vmx_run(void)
 	}
 
 	printk("vmlaunch\n");
-	asm volatile("vmlaunch");
+	//asm volatile("vmlaunch");
+
+    // normally, the vmlaunch jump to guest rip as non-root operation.
 	r = check_vmoperation_result();
+    printk("failed to execute the vmlaunch");
+    //on_each_cpu(vmx_launch, NULL, 1);
 
 fail:
 	return r;
