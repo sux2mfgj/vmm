@@ -231,7 +231,7 @@ static int setup_vmcs(struct vmcs *vmcs)
 	uintptr_t host_rsp;
 	int cpu;
 
-	preempt_disable();
+	//preempt_disable();
 
 	cr0 = read_cr0();
 	printk("write cr0: %08llx\n", cr0);
@@ -264,12 +264,11 @@ static int setup_vmcs(struct vmcs *vmcs)
 	if (!page) {
 		return -1;
 	}
-	host_rsp = (uintptr_t)page_address(page) + 0x1000 - 1;
+
+	//host_rsp = (uintptr_t)page_address(page) + 0x1000 - 1;
 
 	vmcs_write(HOST_RIP, (uintptr_t)vm_exit_guest);
 	printk("write host rip\n");
-	vmcs_write(HOST_RSP, host_rsp);
-	printk("write host rsp\n");
 
 	page = alloc_page(GFP_KERNEL);
 	if (!page) {
@@ -278,10 +277,10 @@ static int setup_vmcs(struct vmcs *vmcs)
 
 	vm.rip = (uintptr_t)test_guest_rip;
 	vm.stack = (uintptr_t)page_address(page) + 0x1000 - 1;
-	//vmcs_write(GUEST_RIP, vm.rip);
-	//vmcs_write(GUEST_RSP, vm.stack);
-    vmcs_write(GUEST_RIP, NULL);
-    vmcs_write(GUEST_RSP, NULL);
+	vmcs_write(GUEST_RIP, vm.rip);
+	vmcs_write(GUEST_RSP, vm.stack);
+    //vmcs_write(GUEST_RIP, NULL);
+    //vmcs_write(GUEST_RSP, NULL);
 
 	vmcs_write(VMCS_LINK_POINTER_FULL, -1ull);
 
@@ -304,8 +303,6 @@ static int setup_vmcs(struct vmcs *vmcs)
 	vmcs_write(HOST_ES_SELECTOR, 0);
 	vmcs_write(GUEST_ES_SELECTOR, 0);
 	vmcs_write(HOST_SS_SELECTOR, __KERNEL_CS);
-	vmcs_write(GUEST_SS_SELECTOR, __KERNEL_CS);
-	vmcs_write(HOST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
 	vmcs_write(GUEST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
 	vmcs_write(HOST_GS_SELECTOR, 0);
 	vmcs_write(GUEST_GS_SELECTOR, 0);
@@ -340,19 +337,26 @@ static int setup_vmcs(struct vmcs *vmcs)
 	printk("vw GUEST_ACTIVITY_STATE\n");
 	vmcs_write(GUEST_ACTIVITY_STATE, 0);
 	printk("vw VM_ENTRY_CONTROLS\n");
-	adjust_vmx_control(MSR_IA32_VMX_ENTRY_CTLS, VM_ENTRY_CONTROLS,
+
+	r = adjust_vmx_control(
+            MSR_IA32_VMX_ENTRY_CTLS, VM_ENTRY_CONTROLS,
 			   VM_ENTRY_CTRL_IA32e_MODE_GUEST);
-	printk("vw VM_EXIT_CONTROLS\n");
-	adjust_vmx_control(MSR_IA32_VMX_EXIT_CTLS, VM_EXIT_CONTROLS, 0);
-	printk("vw PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS\n");
-	adjust_vmx_control(MSR_IA32_VMX_PROCBASED_CTLS,
+
+	r |= adjust_vmx_control(
+            MSR_IA32_VMX_EXIT_CTLS, VM_EXIT_CONTROLS, VM_EXIT_CTRL_HOST_ADDRESS_SPACE_SIZE | VM_EXIT_CTRL_ACK_INTERRUPT_ON_EXIT);
+
+	r |= adjust_vmx_control(
+            MSR_IA32_VMX_PROCBASED_CTLS,
 			   PRIMARY_PROCESSOR_BASED_VM_EXEC_CTRLS,
-			   CPU_BASED_EXEC_HLT_EXIT);
-	printk("vw PIN_BASED\n");
-	r = adjust_vmx_control(MSR_IA32_VMX_PINBASED_CTLS,
+			   CPU_BASED_EXEC_ACTIVE_SECONDARY_CTRLS | CPU_BASED_EXEC_HLT_EXIT);
+
+    r |= adjust_vmx_control(MSR_IA32_VMX_PROCBASED_CTLS2, SECONDARY_PROCESSOR_BASED_VM_EXEC_CONTROL, 0);
+
+	r |= adjust_vmx_control(
+            MSR_IA32_VMX_PINBASED_CTLS,
 			       PIN_BASED_VM_EXEC_CONTROLS, 0);
 
-	preempt_enable();
+	//preempt_enable();
 	return r;
 }
 
@@ -380,27 +384,12 @@ fail:
 static bool is_vmxon = false;
 static int vmxon_cpu = -1;
 
-static void vmx_launch(void* babble)
-{
-    int cpu;
-    if(!is_vmxon)
-    {
-        return;
-    }
-
-	cpu = raw_smp_processor_id();
-	if (vmxon_cpu == cpu) {
-        printk("vmlaunch: %d\n", cpu);
-        asm volatile("vmlaunch");
-        check_vmoperation_result();
-    }
-}
-
 int vmx_run(void)
 {
 	int r = 0;
 	int cpu;
 	uintptr_t vmxon_region_pa, vmxon_region_va;
+    uint64_t rflags;
 
 	if (is_vmxon) {
 		r = -1;
@@ -451,20 +440,55 @@ int vmx_run(void)
 	}
 	printk("success to execute the vmptrload\n");
 
+    preempt_disable();
 	r = setup_vmcs(vmcs_region);
 	if (r) {
 		printk("failed to setup the vmcs region");
 		goto fail;
 	}
 
+    uint64_t rsp;
+    asm volatile (
+            "movq %%rsp, %0"
+            :"=g"(rsp));
+	vmcs_write(HOST_RSP, rsp);
+	printk("write host rsp\n");
+
 	printk("vmlaunch\n");
-	//asm volatile("vmlaunch");
+    asm volatile(
+            "vmlaunch\n\t"
+            "pushfq\n\t"
+            "pop %0\n\t"
+            ".globl vm_exit_guest\n\t"
+            "vm_exit_guest:\n\t"
+            : "=g"(rflags));
+
+    /*
+	asm volatile("vmlaunch");
+
+	asm volatile("pushfq\n\t"
+		     "pop %0"
+		     : "=g"(rflags));
+             */
+
+	r = rflags & X86_EFLAGS_CF;
+	if (r) {
+		printk("VMfailnvalid\n");
+		return r;
+	}
+
+	r = rflags & X86_EFLAGS_ZF;
+	if (r) {
+		r = vmcs_read(VM_INSTRUCTIN_ERROR);
+		printk("VMfailValid: error code %d\n", r);
+		return r;
+	}
 
     // normally, the vmlaunch jump to guest rip as non-root operation.
-	r = check_vmoperation_result();
-    printk("failed to execute the vmlaunch");
+	//r = check_vmoperation_result();
+    printk("is it collect?\n");
+    preempt_enable();
     //on_each_cpu(vmx_launch, NULL, 1);
-
 fail:
 	return r;
 }

@@ -16,13 +16,15 @@ int main(int argc, char const* argv[])
         perror("failed to open the /dev/kvm");
         return 1;
     }
+    printf("opened\n");
 
-    result = ioctl(fd, VMM_DEBUG, 0);
+    result = ioctl(fd, VMM_DEBUG, (unsigned long)0);
     if(result)
     {
         perror("ioctl failed");
         goto close;
     }
+    printf("ioctrled\n");
 
 close:
     result = close(fd);
@@ -31,6 +33,7 @@ close:
         perror("close");
         return 1;
     }
+    printf("closed\n");
 
     return result;
 }
