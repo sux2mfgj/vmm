@@ -64,3 +64,39 @@ Please uninstall a kvm_intel module from guest linux. like,
 ```
 $ modprove -r kvm_instal
 ```
+
+#### Debuging using kdb
+
+1. prepare a KDB enabled kernel
+```
+$ # download linux kernel
+$ cd <the linux kernel directory>
+$ # make distclean mrproper
+$ # make localconfig
+$ make menuconfig
+Kernel Hacking -> KGDB -> KDB
+$ # build and install
+$ # don't forget to change the configuration of boot loader (grub, systemd-boot, etc).
+```
+1. boot with the prepared kernel
+1. install the vmm kernel module and set breakpoint
+```
+$ # login as user
+$ cd <a directory of vmm>
+$ make install
+```
+```
+$ # login as root
+$ echo kbd > /sys/module/kgdboc/parameters/kgdboc
+$ echo g > /proc/sysrq-trigger # or push the magicrq
+kdb> ? # you can see all of commands.
+kdb> bp vmx_run
+kdb> go
+```
+```
+$ # login as user
+$ cd <vmm directory>
+$ make debug
+$ sudo ./debug
+$ dmesg
+```
