@@ -48,16 +48,16 @@ static int vmxon(uint64_t address)
 	int r = 0;
 
 	cpuid = get_cpuid_info();
-	printk("cpuid 0x%llx\n", cpuid);
+	printk(KERN_DEBUG "vmm: cpuid 0x%llx\n", cpuid);
 
 	phys_bit_width = (uint8_t)cpuid;
-	printk("phys bit-width %d\n", phys_bit_width);
+	printk(KERN_DEBUG "vmm: phys bit-width %d\n", phys_bit_width);
 
 	rdmsrl(MSR_IA32_VMX_CR4_FIXED0, msr);
-	printk("msr: vmx_cr4_fixed0 0x%llx\n", msr);
+	printk(KERN_DEBUG "vmm: msr: vmx_cr4_fixed0 0x%llx\n", msr);
 
 	rdmsrl(MSR_IA32_VMX_CR4_FIXED1, msr);
-	printk("msr: vmx_cr4_fixed1 0x%llx\n", msr);
+	printk(KERN_DEBUG "vmm: msr: vmx_cr4_fixed1 0x%llx\n", msr);
 
 	// enable virtual machine extension
 	asm volatile("movq %%cr4, %0" : "=r"(cr4));
@@ -66,26 +66,26 @@ static int vmxon(uint64_t address)
 	//cr4 |= (uint32_t)msr;
 
 	asm volatile("movq %0, %%cr4" : : "r"(cr4));
-	printk("cr4 0x%llx\n", cr4);
+	printk(KERN_DEBUG "vmm: cr4 0x%llx\n", cr4);
 
 	// update MSR IA32_FEATURE_CONTROL
 	rdmsrl(MSR_IA32_FEATURE_CONTROL, msr);
-	printk("msr: feature_control 0x%llx\n", msr);
+	printk(KERN_DEBUG "vmm: msr: feature_control 0x%llx\n", msr);
 	//wrmsrl(MSR_IA32_FEATURE_CONTROL, msr);
 
 	rdmsrl(MSR_IA32_FEATURE_CONTROL, msr);
-	printk("msr: feature_control 0x%llx\n", msr);
+	printk(KERN_DEBUG "vmm: msr: feature_control 0x%llx\n", msr);
 
 	rdmsrl(MSR_IA32_VMX_CR0_FIXED0, msr);
-	printk("msr: vmx_cr0_fixed0 0x%llx\n", msr);
+	printk(KERN_DEBUG "vmm: msr: vmx_cr0_fixed0 0x%llx\n", msr);
 
 	rdmsrl(MSR_IA32_VMX_CR0_FIXED1, msr);
-	printk("msr: vmx_cr0_fixed1 0x%llx\n", msr);
+	printk(KERN_DEBUG "vmm: msr: vmx_cr0_fixed1 0x%llx\n", msr);
 
 	asm volatile("movq %%cr0, %0" : "=r"(cr0));
-	printk("cr0 0x%llx\n", cr0);
+	printk(KERN_DEBUG "vmm: cr0 0x%llx\n", cr0);
 
-	printk("vmxon 0x%llx", address);
+	printk(KERN_DEBUG "vmm: vmxon 0x%llx", address);
 	// vmxon
 	asm volatile("vmxon %0" : : "m"(address));
 
@@ -141,14 +141,14 @@ static inline int check_vmoperation_result(void)
 
 	r = rflags & X86_EFLAGS_CF;
 	if (r) {
-		printk("VMfailnvalid\n");
+		printk(KERN_DEBUG "vmm: VMfailnvalid\n");
 		return r;
 	}
 
 	r = rflags & X86_EFLAGS_ZF;
 	if (r) {
 		r = vmcs_read(VM_INSTRUCTIN_ERROR);
-		printk("VMfailValid: error code %d\n", r);
+		printk(KERN_DEBUG "vmm: VMfailValid: error code %d\n", r);
 		return r;
 	}
 
@@ -214,7 +214,7 @@ static int adjust_vmx_control(const uint32_t msr,
 	flags &= upper;
 	flags |= lower;
 
-	printk("0x%08x 0x%08x 0x%08llx\n", upper, lower, flags);
+	printk(KERN_DEBUG "vmm: 0x%08x 0x%08x 0x%08llx\n", upper, lower, flags);
 
 	r = vmcs_write(dest, flags);
     return r;
@@ -228,40 +228,37 @@ static int setup_vmcs(struct vmcs *vmcs)
 	struct desc_ptr dt;
 	uint64_t msr;
 	struct page *page;
-	uintptr_t host_rsp;
 	int cpu;
 
-	//preempt_disable();
-
 	cr0 = read_cr0();
-	printk("write cr0: %08llx\n", cr0);
+	printk(KERN_DEBUG "vmm: write cr0: %08x\n", cr0);
 	vmcs_write(HOST_CR0, cr0);
-    printk("CR0 0x%08x\n", cr0);
+    printk(KERN_DEBUG "vmm: CR0 0x%08x\n", cr0);
     // CR0
     // | 0  | 1  | 2  | 3  | 4  | 5  |6 ~ 15| 16 | 17 | 18 | 19 ~ 28 | 29 | 30 | 31 |
     // | PE | MP | EM | TS | ET | NE | RE   | WP | RE | AM | RE      | NM | CD | PG |
 	vmcs_write(GUEST_CR0, cr0);
 
 	cr3 = __read_cr3();
-	printk("write cr3: %08llx\n", cr3);
+	printk(KERN_DEBUG "vmm: write cr3: %08llx\n", cr3);
 	vmcs_write(HOST_CR3, cr3);
 	vmcs_write(GUEST_CR3, cr3);
-    printk("CR3 0x%x\n", cr3);
+    printk(KERN_DEBUG "vmm: CR3 0x%llx\n", cr3);
 
 	asm volatile("movq %%cr4, %0" : "=r"(cr4));
-	printk("write cr4\n");
+	printk(KERN_DEBUG "vmm: write cr4\n");
 	vmcs_write(HOST_CR4, cr4);
 	vmcs_write(GUEST_CR4, cr4);
-    printk("CR4 0x%x\n", cr4);
+    printk(KERN_DEBUG "vmm: CR4 0x%llx\n", cr4);
 
 	store_idt(&dt);
-	printk("write idtr\n");
+	printk(KERN_DEBUG "vmm: write idtr\n");
 	vmcs_write(HOST_IDTR_BASE, dt.address);
 	vmcs_write(GUEST_IDTR_BASE, dt.address);
 	vmcs_write(GUEST_IDTR_LIMIT, dt.size);
 
 	native_store_gdt(&dt);
-	printk("write gdtr\n");
+	printk(KERN_DEBUG "vmm: write gdtr\n");
 	vmcs_write(HOST_GDTR_BASE, dt.address);
 	vmcs_write(GUEST_GDTR_BASE, dt.address);
 	vmcs_write(GUEST_GDTR_LIMIT, dt.size);
@@ -271,23 +268,18 @@ static int setup_vmcs(struct vmcs *vmcs)
 		return -1;
 	}
 
-	//host_rsp = (uintptr_t)page_address(page) + 0x1000 - 1;
-
 	vmcs_write(HOST_RIP, (uintptr_t)vm_exit_guest);
-	printk("write host rip\n");
+	printk(KERN_DEBUG "vmm: write host rip\n");
 
 	page = alloc_page(GFP_KERNEL);
 	if (!page) {
 		return -1;
 	}
 
-	//vm.rip = (uintptr_t)test_guest_rip;
-	vm.rip = (uintptr_t)NULL;
+	vm.rip = (uintptr_t)test_guest_rip;
 	vm.stack = (uintptr_t)page_address(page) + 0x1000 - 1;
 	vmcs_write(GUEST_RIP, vm.rip);
 	vmcs_write(GUEST_RSP, vm.stack);
-    //vmcs_write(GUEST_RIP, NULL);
-    //vmcs_write(GUEST_RSP, NULL);
 
 	vmcs_write(VMCS_LINK_POINTER_FULL, -1ull);
 
@@ -298,12 +290,12 @@ static int setup_vmcs(struct vmcs *vmcs)
 	rdmsrl(MSR_IA32_SYSENTER_EIP, msr);
 	vmcs_write(HOST_IA32_SYSENTER_EIP, msr);
 	vmcs_write(GUEST_IA32_SYSENTER_EIP, msr);
-    printk("SYSENTER_EIP 0x%x\n", msr);
+    printk(KERN_DEBUG "vmm: SYSENTER_EIP 0x%llx\n", msr);
 
 	rdmsrl(MSR_IA32_SYSENTER_ESP, msr);
 	vmcs_write(HOST_IA32_SYSENTER_ESP, msr);
 	vmcs_write(GUEST_IA32_SYSENTER_ESP, msr);
-    printk("SYSENTER_ESP 0x%x\n", msr);
+    printk(KERN_DEBUG "vmm: SYSENTER_ESP 0x%llx\n", msr);
 
 	vmcs_write(HOST_CS_SELECTOR, __KERNEL_CS & 0xf8);
 	vmcs_write(GUEST_CS_SELECTOR, __KERNEL_CS & 0xf8);
@@ -352,11 +344,11 @@ static int setup_vmcs(struct vmcs *vmcs)
 	rdmsrl(MSR_IA32_DEBUGCTLMSR, msr);
 	vmcs_write(GUEST_IA32_DEBUGCTL_FULL, msr);
 
-	printk("vw GUEST_INTERRUPTIBILITY_STATE\n");
+	printk(KERN_DEBUG "vmm: vw GUEST_INTERRUPTIBILITY_STATE\n");
 	vmcs_write(GUEST_INTERRUPTIBILITY_STATE, 0);
-	printk("vw GUEST_ACTIVITY_STATE\n");
+	printk(KERN_DEBUG "vmm: vw GUEST_ACTIVITY_STATE\n");
 	vmcs_write(GUEST_ACTIVITY_STATE, 0);
-	printk("vw VM_ENTRY_CONTROLS\n");
+	printk(KERN_DEBUG "vmm: vw VM_ENTRY_CONTROLS\n");
 
 	r = adjust_vmx_control(
             MSR_IA32_VMX_ENTRY_CTLS, VM_ENTRY_CONTROLS,
@@ -376,7 +368,6 @@ static int setup_vmcs(struct vmcs *vmcs)
             MSR_IA32_VMX_PINBASED_CTLS,
 			       PIN_BASED_VM_EXEC_CONTROLS, 0);
 
-	//preempt_enable();
 	return r;
 }
 
@@ -410,6 +401,7 @@ int vmx_run(void)
 	int cpu;
 	uintptr_t vmxon_region_pa, vmxon_region_va;
     uint64_t rflags;
+    uint64_t rsp;
 
 	if (is_vmxon) {
 		r = -1;
@@ -419,7 +411,7 @@ int vmx_run(void)
 	cpu = raw_smp_processor_id();
 	vmxon_region_va = (uintptr_t)per_cpu(vmxon_region, cpu);
 	if ((struct vmcs *)vmxon_region_va == NULL) {
-		printk("why??\n");
+		printk(KERN_ERR "vmm: why??\n");
 		r = -2;
 		goto fail;
 	}
@@ -432,84 +424,78 @@ int vmx_run(void)
 
 	r = vmxon((uint64_t)vmxon_region_pa);
 	if (r) {
-		printk("faild to vmxon\n");
+		printk(KERN_ERR "vmm: faild to vmxon\n");
 		goto fail;
 	}
 	is_vmxon = true;
 	vmxon_cpu = cpu;
-	printk("vmxon_cpu: %d\n", vmxon_cpu);
-	printk("success to execute the vmxon\n");
+	printk(KERN_DEBUG "vmm: vmxon_cpu: %d\n", vmxon_cpu);
+	printk(KERN_DEBUG "vmm: success to execute the vmxon\n");
 
 	vmcs_region = alloc_vmcs_region(cpu);
 	if (vmcs_region == NULL) {
-		printk("failed allocate a vmcs region\n");
+		printk(KERN_ERR "vmm: failed allocate a vmcs region\n");
 		return -1;
 	}
 
 	r = vmcs_clear(vmcs_region);
 	if (r) {
-		printk("failed to execute the vmclear");
+		printk(KERN_ERR "vmm: failed to execute the vmclear");
 		return -1;
 	}
-	printk("success to execute the vmclear\n");
+	printk(KERN_DEBUG "vmm: success to execute the vmclear\n");
 
 	r = vmcs_load(vmcs_region);
 	if (r) {
-		printk("failed to execute the vmptrld");
+		printk(KERN_ERR "vmm: failed to execute the vmptrld");
 		return -1;
 	}
-	printk("success to execute the vmptrload\n");
+	printk(KERN_DEBUG "vmm: success to execute the vmptrload\n");
 
     preempt_disable();
 	r = setup_vmcs(vmcs_region);
 	if (r) {
-		printk("failed to setup the vmcs region");
+		printk(KERN_ERR "vmm: failed to setup the vmcs region");
 		goto fail;
 	}
 
-    uint64_t rsp;
     asm volatile (
             "movq %%rsp, %0"
             :"=g"(rsp));
 	vmcs_write(HOST_RSP, rsp);
-	printk("write host rsp\n");
-    printk("rsp: 0x%x\n", rsp);
+	printk(KERN_DEBUG "vmm: write host rsp\n");
+    printk(KERN_DEBUG "vmm: rsp: 0x%llx\n", rsp);
 
-	printk("vmlaunch\n");
+	printk(KERN_DEBUG "vmm: vmlaunch\n");
     asm volatile(
-            //"vmlaunch\n\t"
+            "vmlaunch\n\t"
             "pushfq\n\t"
             "pop %0\n\t"
             ".globl vm_exit_guest\n\t"
             "vm_exit_guest:\n\t"
             : "=g"(rflags));
-
-    /*
-	asm volatile("vmlaunch");
-
-	asm volatile("pushfq\n\t"
-		     "pop %0"
-		     : "=g"(rflags));
-             */
+    // TODO save guest registers and load host registers
 
 	r = rflags & X86_EFLAGS_CF;
 	if (r) {
-		printk("VMfailnvalid\n");
+		printk(KERN_ERR "vmm: VMfailnvalid\n");
 		return r;
 	}
 
 	r = rflags & X86_EFLAGS_ZF;
 	if (r) {
 		r = vmcs_read(VM_INSTRUCTIN_ERROR);
-		printk("VMfailValid: error code %d\n", r);
+		printk(KERN_ERR "vmm: VMfailValid: error code %d\n", r);
 		return r;
 	}
 
     // normally, the vmlaunch jump to guest rip as non-root operation.
 	//r = check_vmoperation_result();
-    printk("is it collect?\n");
+    printk(KERN_DEBUG "vmm: is it collect?\n");
     preempt_enable();
-    //on_each_cpu(vmx_launch, NULL, 1);
+
+    return 0;
+
 fail:
 	return r;
 }
@@ -519,13 +505,13 @@ static void check_and_vmxoff(void *babble)
 	int cpu = raw_smp_processor_id();
 	if (vmxon_cpu == cpu) {
 		if (vmcs_region != NULL) {
-			printk("vmclar and free the vmcs_region\n");
+			printk(KERN_ERR "vmm: vmclar and free the vmcs_region\n");
 			vmcs_clear(vmcs_region);
 			__free_page(virt_to_page(vmcs_region));
 			vmcs_region = NULL;
 		}
 
-		printk("cpu %d: vmxoff\n", cpu);
+		printk(KERN_DEBUG "vmm: cpu %d: vmxoff\n", cpu);
 		vmxoff();
 		is_vmxon = false;
 	}
@@ -539,22 +525,22 @@ void vmx_tear_down(void)
 	on_each_cpu(check_and_vmxoff, NULL, 1);
 
 	for_each_possible_cpu (cpu) {
-		printk("cpu: %d\n", cpu);
+		printk(KERN_DEBUG "vmm: cpu: %d\n", cpu);
 
 		vmcs = per_cpu(vmxon_region, cpu);
 		if (vmcs != NULL) {
-			printk("free the vmxon_region\n");
+			printk(KERN_ERR "vmm: free the vmxon_region\n");
 			__free_page(virt_to_page(vmcs));
 			vmcs = NULL;
 		}
 	}
 
-	printk("bye\n");
+	printk(KERN_DEBUG "vmm: bye\n");
 }
 
 void vm_exit_handler(uintptr_t guest_regs_ptr)
 {
-	printk("handling the vm exit\n");
+	printk(KERN_DEBUG "vmm: handling the vm exit\n");
 	while (true) {
 	}
 	return;
