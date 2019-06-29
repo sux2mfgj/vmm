@@ -281,7 +281,8 @@ static int setup_vmcs(struct vmcs *vmcs)
 		return -1;
 	}
 
-	vm.rip = (uintptr_t)test_guest_rip;
+	//vm.rip = (uintptr_t)test_guest_rip;
+	vm.rip = (uintptr_t)NULL;
 	vm.stack = (uintptr_t)page_address(page) + 0x1000 - 1;
 	vmcs_write(GUEST_RIP, vm.rip);
 	vmcs_write(GUEST_RSP, vm.stack);
@@ -472,10 +473,11 @@ int vmx_run(void)
             :"=g"(rsp));
 	vmcs_write(HOST_RSP, rsp);
 	printk("write host rsp\n");
+    printk("rsp: 0x%x\n", rsp);
 
 	printk("vmlaunch\n");
     asm volatile(
-            "vmlaunch\n\t"
+            //"vmlaunch\n\t"
             "pushfq\n\t"
             "pop %0\n\t"
             ".globl vm_exit_guest\n\t"
