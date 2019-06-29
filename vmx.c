@@ -200,7 +200,6 @@ static int vmcs_write(enum vmcs_field_encoding encoding, uint64_t value)
 	asm volatile("vmwrite %1, %0" ::"r"(field), "r"(value));
 
 	r = check_vmoperation_result();
-
 	return r;
 }
 
@@ -224,7 +223,8 @@ static int adjust_vmx_control(const uint32_t msr,
 static int setup_vmcs(struct vmcs *vmcs)
 {
 	int r = 0;
-	uint64_t cr0, cr3, cr4, rflags;
+    uint32_t cr0;
+	uint64_t cr3, cr4, rflags;
 	struct desc_ptr dt;
 	uint64_t msr;
 	struct page *page;
@@ -236,17 +236,23 @@ static int setup_vmcs(struct vmcs *vmcs)
 	cr0 = read_cr0();
 	printk("write cr0: %08llx\n", cr0);
 	vmcs_write(HOST_CR0, cr0);
+    printk("CR0 0x%08x\n", cr0);
+    // CR0
+    // | 0  | 1  | 2  | 3  | 4  | 5  |6 ~ 15| 16 | 17 | 18 | 19 ~ 28 | 29 | 30 | 31 |
+    // | PE | MP | EM | TS | ET | NE | RE   | WP | RE | AM | RE      | NM | CD | PG |
 	vmcs_write(GUEST_CR0, cr0);
 
 	cr3 = __read_cr3();
 	printk("write cr3: %08llx\n", cr3);
 	vmcs_write(HOST_CR3, cr3);
 	vmcs_write(GUEST_CR3, cr3);
+    printk("CR3 0x%x\n", cr3);
 
 	asm volatile("movq %%cr4, %0" : "=r"(cr4));
 	printk("write cr4\n");
 	vmcs_write(HOST_CR4, cr4);
 	vmcs_write(GUEST_CR4, cr4);
+    printk("CR4 0x%x\n", cr4);
 
 	store_idt(&dt);
 	printk("write idtr\n");
@@ -291,25 +297,38 @@ static int setup_vmcs(struct vmcs *vmcs)
 	rdmsrl(MSR_IA32_SYSENTER_EIP, msr);
 	vmcs_write(HOST_IA32_SYSENTER_EIP, msr);
 	vmcs_write(GUEST_IA32_SYSENTER_EIP, msr);
+    printk("SYSENTER_EIP 0x%x\n", msr);
 
 	rdmsrl(MSR_IA32_SYSENTER_ESP, msr);
 	vmcs_write(HOST_IA32_SYSENTER_ESP, msr);
 	vmcs_write(GUEST_IA32_SYSENTER_ESP, msr);
+    printk("SYSENTER_ESP 0x%x\n", msr);
 
-	vmcs_write(HOST_CS_SELECTOR, __KERNEL_CS);
-	vmcs_write(GUEST_CS_SELECTOR, __KERNEL_CS);
+	vmcs_write(HOST_CS_SELECTOR, __KERNEL_CS & 0xf8);
+	vmcs_write(GUEST_CS_SELECTOR, __KERNEL_CS & 0xf8);
 	vmcs_write(HOST_DS_SELECTOR, 0);
 	vmcs_write(GUEST_DS_SELECTOR, 0);
 	vmcs_write(HOST_ES_SELECTOR, 0);
 	vmcs_write(GUEST_ES_SELECTOR, 0);
-	vmcs_write(HOST_SS_SELECTOR, __KERNEL_CS);
-	vmcs_write(GUEST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
-	vmcs_write(HOST_GS_SELECTOR, 0);
-	vmcs_write(GUEST_GS_SELECTOR, 0);
+    vmcs_write(HOST_FS_SELECTOR, 0);
+    vmcs_write(GUEST_FS_SELECTOR, 0);
+    vmcs_write(HOST_GS_SELECTOR, 0);
+    vmcs_write(GUEST_GS_SELECTOR, 0);
+	vmcs_write(HOST_SS_SELECTOR, __KERNEL_CS & 0xf8);
+
+    rdmsrl(MSR_FS_BASE, msr);
+    vmcs_write(HOST_FS_BASE, msr);
+    vmcs_write(GUEST_FS_BASE, msr);
+    rdmsrl(MSR_GS_BASE, msr);
+    vmcs_write(HOST_GS_BASE, msr);
+    vmcs_write(GUEST_GS_BASE, msr);
 
 	cpu = get_cpu();
 	vmcs_write(HOST_TR_BASE,
-		   (unsigned long)&get_cpu_entry_area(cpu)->tss.x86_tss);
+		   (unsigned long)&get_cpu_entry_area(cpu)->tss.x86_tss & 0xf8);
+
+    vmcs_write(HOST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
+	vmcs_write(GUEST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
 
 	vmcs_write(GUEST_DR7, 0x400);
 
