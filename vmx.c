@@ -468,6 +468,8 @@ int vmx_run(void)
 
 	printk(KERN_DEBUG "vmm: vmlaunch\n");
     asm volatile(
+            ".globl vmlaunch_prev\n\t"
+            "vmlaunch_prev:\n\t"
             "vmlaunch\n\t"
             "pushfq\n\t"
             "pop %0\n\t"
