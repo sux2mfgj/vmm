@@ -105,6 +105,13 @@ static int vmxoff(void)
 	return r;
 }
 
+static uint64_t get_segment_limit(uint64_t selector)
+{
+    uint64_t limit;
+    asm volatile ("lsl %1, %0" : "=r"(limit) : "r"(selector));
+    return limit;
+}
+
 static struct vmcs *alloc_vmcs_region(int cpu)
 {
 	struct vmcs *vmcs;
@@ -183,11 +190,11 @@ static inline uint64_t vmcs_read(enum vmcs_field_encoding encoding)
 {
 	unsigned long value;
 	unsigned long field = encoding;
-	int r;
+	//int r;
 
 	asm volatile("vmread %1, %0" : "=r"(value) : "r"(field));
 
-	r = check_vmoperation_result();
+	//r = check_vmoperation_result();
 
 	return value;
 }
@@ -229,6 +236,7 @@ static int setup_vmcs(struct vmcs *vmcs)
 	uint64_t msr;
 	struct page *page;
 	int cpu;
+    uint64_t limit;
 
 	cr0 = read_cr0();
 	printk(KERN_DEBUG "vmm: write cr0: %08x\n", cr0);
@@ -276,7 +284,8 @@ static int setup_vmcs(struct vmcs *vmcs)
 		return -1;
 	}
 
-	vm.rip = (uintptr_t)test_guest_rip;
+	//vm.rip = (uintptr_t)test_guest_rip;
+	vm.rip = (uintptr_t)NULL;
 	vm.stack = (uintptr_t)page_address(page) + 0x1000 - 1;
 	vmcs_write(GUEST_RIP, vm.rip);
 	vmcs_write(GUEST_RSP, vm.stack);
@@ -297,8 +306,13 @@ static int setup_vmcs(struct vmcs *vmcs)
 	vmcs_write(GUEST_IA32_SYSENTER_ESP, msr);
     printk(KERN_DEBUG "vmm: SYSENTER_ESP 0x%llx\n", msr);
 
-	vmcs_write(HOST_CS_SELECTOR, __KERNEL_CS & 0xf8);
-	vmcs_write(GUEST_CS_SELECTOR, __KERNEL_CS & 0xf8);
+	//vmcs_write(HOST_CS_SELECTOR, __KERNEL_CS & 0xf8);
+	//vmcs_write(GUEST_CS_SELECTOR, __KERNEL_CS & 0xf8);
+    vmcs_write(HOST_CS_SELECTOR, __KERNEL_CS & 0xf8);
+    vmcs_write(GUEST_CS_SELECTOR, __KERNEL_CS & 0xf8);
+	vmcs_write(HOST_SS_SELECTOR, 0x18);
+	vmcs_write(GUEST_SS_SELECTOR, 0x18);
+
 	vmcs_write(HOST_DS_SELECTOR, 0);
 	vmcs_write(GUEST_DS_SELECTOR, 0);
 	vmcs_write(HOST_ES_SELECTOR, 0);
@@ -307,7 +321,19 @@ static int setup_vmcs(struct vmcs *vmcs)
     vmcs_write(GUEST_FS_SELECTOR, 0);
     vmcs_write(HOST_GS_SELECTOR, 0);
     vmcs_write(GUEST_GS_SELECTOR, 0);
-	vmcs_write(HOST_SS_SELECTOR, __KERNEL_CS & 0xf8);
+
+    limit = get_segment_limit(__KERNEL_CS);
+    vmcs_write(GUEST_CS_LIMIT, limit);
+
+    limit = get_segment_limit(__KERNEL_DS);
+    vmcs_write(GUEST_SS_LIMIT, limit);
+
+    limit = get_segment_limit(0);
+    vmcs_write(GUEST_ES_LIMIT, limit);
+    vmcs_write(GUEST_DS_LIMIT, limit);
+    vmcs_write(GUEST_FS_LIMIT, limit);
+    vmcs_write(GUEST_GS_LIMIT, limit);
+
 
     rdmsrl(MSR_FS_BASE, msr);
     vmcs_write(HOST_FS_BASE, msr);
@@ -324,6 +350,10 @@ static int setup_vmcs(struct vmcs *vmcs)
 	vmcs_write(GUEST_TR_SELECTOR, GDT_ENTRY_TSS * 8);
 
 	vmcs_write(GUEST_DR7, 0x400);
+
+    vmcs_write(GUEST_LDTR_BASE, 0);
+    vmcs_write(GUEST_LDTR_SELECTOR, 0);
+    vmcs_write(GUEST_LDTR_LIMIT, 0);
 
 	asm volatile("pushfq\n\t"
 		     "pop %0"
@@ -470,11 +500,13 @@ int vmx_run(void)
     asm volatile(
             ".globl vmlaunch_prev\n\t"
             "vmlaunch_prev:\n\t"
+            "cli\n\t"
             "vmlaunch\n\t"
             "pushfq\n\t"
             "pop %0\n\t"
             ".globl vm_exit_guest\n\t"
             "vm_exit_guest:\n\t"
+            "sti\n\t"
             : "=g"(rflags));
     // TODO save guest registers and load host registers
 
