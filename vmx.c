@@ -12,7 +12,7 @@ struct vmcs {
 	u32 data[1];
 };
 
-static struct vmcs vmxon_region;
+static struct vmcs *vmxon_region;
 //static struct vmcs vmcs;
 
 static inline int check_vmoperation_result(void)
@@ -39,6 +39,29 @@ static inline int check_vmoperation_result(void)
 	}
 
 	return 0;
+}
+
+static struct vmcs *alloc_vmcs_region(int cpu)
+{
+	struct vmcs *vmcs;
+	struct page *page;
+	uint32_t vmx_msr_low, vmx_msr_high;
+	size_t vmcs_size;
+
+	int node = cpu_to_node(cpu);
+
+	rdmsr(MSR_IA32_VMX_BASIC, vmx_msr_low, vmx_msr_high);
+	vmcs_size = vmx_msr_high & 0x1ffff;
+
+	page = __alloc_pages_node(node, GFP_KERNEL, 0);
+	if (!page) {
+		return NULL;
+	}
+
+    vmcs = page_address(page);
+	memset(vmcs, 0, vmcs_size);
+
+	return vmcs;
 }
 
 static int vmxon(u64 address)
@@ -68,10 +91,12 @@ int vmx_run(void)
     u64 pa_vmx;
     u64 cr0, cr4, msr_tmp;
     int r;
+    int cpu = smp_processor_id();
 
 	rdmsrl(MSR_IA32_VMX_BASIC, msr_vmx_basic);
+    vmxon_region = alloc_vmcs_region(cpu);
 
-	vmxon_region.revision_id = (u32)msr_vmx_basic;
+	vmxon_region->revision_id = (u32)msr_vmx_basic;
 
     cr0 = read_cr0();
     rdmsrl(MSR_IA32_VMX_CR0_FIXED1, msr_tmp);
@@ -87,9 +112,9 @@ int vmx_run(void)
     cr4 |= msr_tmp;
     write_cr4(cr4);
 
-	pa_vmx = __pa(&vmxon_region);
+	pa_vmx = __pa(vmxon_region);
 
-    printk("%p %ld\n", &vmxon_region, (uintptr_t)pa_vmx);
+    printk("%p %ld\n", vmxon_region, (uintptr_t)pa_vmx);
     r = vmxon(pa_vmx);
     if(r)
     {
