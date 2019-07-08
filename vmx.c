@@ -322,6 +322,11 @@ static int setup_vmcs(struct vmcs *vmcs)
     vmcs_write(HOST_GS_SELECTOR, 0);
     vmcs_write(GUEST_GS_SELECTOR, 0);
 
+    vmcs_write(GUEST_ES_BASE, 0);
+    vmcs_write(GUEST_CS_BASE, 0);
+    vmcs_write(GUEST_SS_BASE, 0);
+    vmcs_write(GUEST_DS_BASE, 0);
+
     limit = get_segment_limit(__KERNEL_CS);
     vmcs_write(GUEST_CS_LIMIT, limit);
 
@@ -355,10 +360,12 @@ static int setup_vmcs(struct vmcs *vmcs)
     vmcs_write(GUEST_LDTR_SELECTOR, 0);
     vmcs_write(GUEST_LDTR_LIMIT, 0);
 
+    // TODO: setup the GUEST_*_AR_BYTES
+
 	asm volatile("pushfq\n\t"
 		     "pop %0"
 		     : "=g"(rflags));
-	vmcs_write(GUEST_RFLAGS, rflags);
+	vmcs_write(GUEST_RFLAGS, rflags & ~X86_EFLAGS_IF);
 
 	vmcs_write(TSC_OFFSET_FULL, 0);
 
@@ -500,7 +507,6 @@ int vmx_run(void)
     asm volatile(
             ".globl vmlaunch_prev\n\t"
             "vmlaunch_prev:\n\t"
-            "cli\n\t"
             "vmlaunch\n\t"
             "pushfq\n\t"
             "pop %0\n\t"
