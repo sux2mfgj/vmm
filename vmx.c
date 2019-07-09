@@ -26,7 +26,7 @@ static inline int check_vmoperation_result(void)
 		     : "=g"(rflags));
 
 	r = rflags & X86_EFLAGS_CF;
-    printk("vmm: rflags %llx\n", rflags);
+	printk("vmm: rflags %llx\n", rflags);
 	if (r) {
 		printk(KERN_DEBUG "vmm: VMfailnvalid\n");
 		return r;
@@ -59,7 +59,7 @@ static struct vmcs *alloc_vmcs_region(int cpu)
 		return NULL;
 	}
 
-    vmcs = page_address(page);
+	vmcs = page_address(page);
 	memset(vmcs, 0, vmcs_size);
 
 	return vmcs;
@@ -67,28 +67,37 @@ static struct vmcs *alloc_vmcs_region(int cpu)
 
 static int vmxon(u64 address)
 {
-    u8 error;
-	asm volatile("vmxon %1; setna %0" : "=q"(error): "m"(address) : "memory", "cc");
+	u8 error;
+	asm volatile("vmxon %1; setna %0"
+		     : "=q"(error)
+		     : "m"(address)
+		     : "memory", "cc");
 
-    return error;
+	return error;
 }
 
 static int vmclear(u64 address)
 {
+	u8 error;
+	asm volatile("vmclear %1; setna %0" : "=qm"(error) : "m"(address));
 
-    u8 error;
+	return error;
+}
 
-	asm volatile("vmclear %1; setna %0" : "=q"(error):"m"(address));
+static int vmptrld(u64 address)
+{
+	u8 error;
+	asm volatile("vmptrld %1; setna %0" : "=qm"(error) : "m"(address));
 
 	return error;
 }
 
 static u64 read_cr4(void)
 {
-    u64 cr4;
+	u64 cr4;
 	asm volatile("movq %%cr4, %0" : "=r"(cr4));
 
-    return cr4;
+	return cr4;
 }
 
 static void write_cr4(u64 cr4)
@@ -99,70 +108,77 @@ static void write_cr4(u64 cr4)
 int vmx_run(void)
 {
 	u64 msr_vmx_basic;
-    u64 pa_vmx, pa_vmcs;
-    u64 cr0, cr4, msr_tmp;
-    int r;
-    int cpu = smp_processor_id();
+	u64 pa_vmx, pa_vmcs;
+	u64 cr0, cr4, msr_tmp;
+	int r;
+	int cpu = smp_processor_id();
 
 	rdmsrl(MSR_IA32_VMX_BASIC, msr_vmx_basic);
-    vmxon_region = alloc_vmcs_region(cpu);
+	vmxon_region = alloc_vmcs_region(cpu);
 
 	vmxon_region->revision_id = (u32)msr_vmx_basic;
 
-    cr0 = read_cr0();
-    rdmsrl(MSR_IA32_VMX_CR0_FIXED1, msr_tmp);
-    cr0 &= msr_tmp;
-    rdmsrl(MSR_IA32_VMX_CR0_FIXED0, msr_tmp);
-    cr0 |= msr_tmp;
-    write_cr0(cr0);
+	cr0 = read_cr0();
+	rdmsrl(MSR_IA32_VMX_CR0_FIXED1, msr_tmp);
+	cr0 &= msr_tmp;
+	rdmsrl(MSR_IA32_VMX_CR0_FIXED0, msr_tmp);
+	cr0 |= msr_tmp;
+	write_cr0(cr0);
 
-    cr4 = read_cr4();
-    rdmsrl(MSR_IA32_VMX_CR4_FIXED1, msr_tmp);
-    cr4 &= msr_tmp;
-    rdmsrl(MSR_IA32_VMX_CR4_FIXED0, msr_tmp);
-    cr4 |= msr_tmp;
-    write_cr4(cr4);
+	cr4 = read_cr4();
+	rdmsrl(MSR_IA32_VMX_CR4_FIXED1, msr_tmp);
+	cr4 &= msr_tmp;
+	rdmsrl(MSR_IA32_VMX_CR4_FIXED0, msr_tmp);
+	cr4 |= msr_tmp;
+	write_cr4(cr4);
 
 	pa_vmx = __pa(vmxon_region);
 
-    printk("%p %ld\n", vmxon_region, (uintptr_t)pa_vmx);
-    r = vmxon(pa_vmx);
-    if(r)
-    {
-        printk(KERN_ERR "vmm: failed to vmxon [%d]\n", r);
-        return r;
-    }
-    vmxon_cpu = cpu;
+	printk("%p %ld\n", vmxon_region, (uintptr_t)pa_vmx);
+	r = vmxon(pa_vmx);
+	if (r) {
+		printk(KERN_ERR "vmm: failed to vmxon [%d]\n", r);
+		return r;
+	}
+	vmxon_cpu = cpu;
 
-    vmcs = alloc_vmcs_region(cpu);
-    pa_vmcs = __pa(vmcs);
+	vmcs = alloc_vmcs_region(cpu);
+    vmcs->revision_id = (u32)msr_vmx_basic;
+	pa_vmcs = __pa(vmcs);
 
-    r = vmclear(pa_vmcs);
+	r = vmclear(pa_vmcs);
+	if (r) {
+		printk(KERN_ERR "vmm: vmclear failed [%d]\n", r);
+		return r;
+	}
+
+	r = vmptrld(pa_vmcs);
+	if (r) {
+		printk(KERN_ERR "vmm: vmptrld failed [%d]\n", r);
+		return r;
+	}
 
 	return 0;
 }
 
-void vmxoff(void* junk)
+void vmxoff(void *junk)
 {
-    int cpu = smp_processor_id();
-    if(vmxon_cpu == cpu)
-    {
-        u8 error;
-        asm volatile("vmxoff; setna %0" : "=q"(error));
-        if(error)
-        {
-            printk(KERN_ERR "vmm: failed to vmxoff\n");
-            return;
-        }
+	int cpu = smp_processor_id();
+	if (vmxon_cpu == cpu) {
+		u8 error;
+		asm volatile("vmxoff; setna %0" : "=q"(error));
+		if (error) {
+			printk(KERN_ERR "vmm: failed to vmxoff\n");
+			return;
+		}
 
-        printk("vmm: vmxoff success\n");
-    }
-
+		printk("vmm: vmxoff success\n");
+	}
 }
 
 int vmx_deinit(void)
 {
-    on_each_cpu(vmxoff, NULL, 1);
+	on_each_cpu(vmxoff, NULL, 1);
 
-    return 0;
+	return 0;
 }

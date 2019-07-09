@@ -24,7 +24,6 @@ static long vmm_dev_ioctl(struct file *filep, unsigned int ioctl,
 	switch (ioctl) {
 	case VMM_DEBUG:
 		r = vmx_run();
-		// TODO
 		break;
 
 	default:
