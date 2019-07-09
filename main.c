@@ -103,6 +103,7 @@ failed:
 
 static void vmm_exit(void)
 {
+    vmx_deinit();
 	unregister_device();
 	printk(KERN_DEBUG "vmm: bye\n");
 }

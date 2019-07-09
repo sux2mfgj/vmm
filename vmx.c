@@ -12,8 +12,9 @@ struct vmcs {
 	u32 data[1];
 };
 
+static int vmxon_cpu = -1;
 static struct vmcs *vmxon_region;
-//static struct vmcs vmcs;
+static struct vmcs *vmcs;
 
 static inline int check_vmoperation_result(void)
 {
@@ -72,6 +73,16 @@ static int vmxon(u64 address)
     return error;
 }
 
+static int vmclear(u64 address)
+{
+
+    u8 error;
+
+	asm volatile("vmclear %1; setna %0" : "=q"(error):"m"(address));
+
+	return error;
+}
+
 static u64 read_cr4(void)
 {
     u64 cr4;
@@ -88,7 +99,7 @@ static void write_cr4(u64 cr4)
 int vmx_run(void)
 {
 	u64 msr_vmx_basic;
-    u64 pa_vmx;
+    u64 pa_vmx, pa_vmcs;
     u64 cr0, cr4, msr_tmp;
     int r;
     int cpu = smp_processor_id();
@@ -121,6 +132,37 @@ int vmx_run(void)
         printk(KERN_ERR "vmm: failed to vmxon [%d]\n", r);
         return r;
     }
+    vmxon_cpu = cpu;
+
+    vmcs = alloc_vmcs_region(cpu);
+    pa_vmcs = __pa(vmcs);
+
+    r = vmclear(pa_vmcs);
 
 	return 0;
+}
+
+void vmxoff(void* junk)
+{
+    int cpu = smp_processor_id();
+    if(vmxon_cpu == cpu)
+    {
+        u8 error;
+        asm volatile("vmxoff; setna %0" : "=q"(error));
+        if(error)
+        {
+            printk(KERN_ERR "vmm: failed to vmxoff\n");
+            return;
+        }
+
+        printk("vmm: vmxoff success\n");
+    }
+
+}
+
+int vmx_deinit(void)
+{
+    on_each_cpu(vmxoff, NULL, 1);
+
+    return 0;
 }

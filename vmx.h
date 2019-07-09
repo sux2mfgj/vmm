@@ -2,5 +2,6 @@
 #define __VMX_H
 
 int vmx_run(void);
+int vmx_deinit(void);
 
 #endif
