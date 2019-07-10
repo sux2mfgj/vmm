@@ -105,6 +105,23 @@ static void write_cr4(u64 cr4)
 	asm volatile("movq %0, %%cr4" : : "r"(cr4));
 }
 
+static void adjust_ctrl_value(u32 msr, u32 *val)
+{
+	u64 tmp;
+	rdmsrl(msr, tmp);
+	*val &= (u32)(tmp >> 32);
+	*val |= (u32)tmp;
+}
+
+static int vmwrite(u64 field, u64 value)
+{
+	u8 error;
+	asm volatile("vmwrite %2, %1; setna %0"
+		     : "=qm"(error)
+		     : "r"(field), "r"(value));
+	return error;
+}
+
 int vmx_run(void)
 {
 	u64 msr_vmx_basic;
@@ -143,7 +160,7 @@ int vmx_run(void)
 	vmxon_cpu = cpu;
 
 	vmcs = alloc_vmcs_region(cpu);
-    vmcs->revision_id = (u32)msr_vmx_basic;
+	vmcs->revision_id = (u32)msr_vmx_basic;
 	pa_vmcs = __pa(vmcs);
 
 	r = vmclear(pa_vmcs);
@@ -157,6 +174,68 @@ int vmx_run(void)
 		printk(KERN_ERR "vmm: vmptrld failed [%d]\n", r);
 		return r;
 	}
+
+	u32 msr_off = 0;
+	if (msr_vmx_basic & VMX_BASIC_TRUE_CTLS) {
+		msr_off = 0xc;
+	}
+
+	printk(KERN_DEBUG "vmm: msr_off %d\n", msr_off);
+
+	u32 vm_entry_ctrl = VM_ENTRY_IA32E_MODE;
+	adjust_ctrl_value(MSR_IA32_VMX_ENTRY_CTLS + msr_off, &vm_entry_ctrl);
+
+	u32 vm_exit_ctrl =
+		VM_EXIT_ASK_INTR_ON_EXIT | VM_EXIT_HOST_ADDR_SPACE_SIZE;
+	adjust_ctrl_value(MSR_IA32_VMX_EXIT_CTLS + msr_off, &vm_exit_ctrl);
+
+	u32 vm_pin_ctrl = 0;
+
+	u32 vm_cpu_ctrl = CPU_BASED_HLT_EXITING;
+	adjust_ctrl_value(MSR_IA32_VMX_PROCBASED_CTLS + msr_off, &vm_cpu_ctrl);
+
+	u32 vm_2nd_ctrl = 0;
+
+	r |= vmwrite(VM_ENTRY_CONTROLS, vm_entry_ctrl);
+	r |= vmwrite(VM_EXIT_CONTROLS, vm_exit_ctrl);
+	r |= vmwrite(PIN_BASED_VM_EXEC_CONTROL, vm_pin_ctrl);
+	r |= vmwrite(CPU_BASED_VM_EXEC_CONTROL, vm_cpu_ctrl);
+	r |= vmwrite(SECONDARY_VM_EXEC_CONTROL, vm_2nd_ctrl);
+
+	if (r) {
+		printk(KERN_ERR
+		       "vmm: error occured at VM CONTROL setups [%d]\n",
+		       r);
+		return r;
+	}
+
+	r |= vmwrite(VM_EXIT_MSR_STORE_COUNT, 0);
+	r |= vmwrite(VM_EXIT_MSR_STORE_ADDR, 0);
+	r |= vmwrite(VM_EXIT_MSR_LOAD_COUNT, 0);
+	r |= vmwrite(VM_EXIT_MSR_LOAD_ADDR, 0);
+	r |= vmwrite(VM_ENTRY_MSR_LOAD_COUNT, 0);
+	r |= vmwrite(VM_ENTRY_INTR_INFO_FIELD, 0);
+
+	if (r) {
+		printk(KERN_ERR
+		       "vmm: error occured at msr count configurations. [%d]\n",
+		       r);
+		return r;
+	}
+
+	r |= vmwrite(PAGE_FAULT_ERROR_CODE_MASK, 0);
+	r |= vmwrite(PAGE_FAULT_ERROR_CODE_MATCH, 0);
+	r |= vmwrite(CR3_TARGET_COUNT, 0);
+	r |= vmwrite(VMCS_LINK_POINTER, -1ULL);
+
+	if (r) {
+		printk(KERN_ERR
+		       "vmm: error occured at configuration of control field[%d]\n",
+		       r);
+        return r;
+	}
+
+    // configuration of guest state areas.
 
 	return 0;
 }
