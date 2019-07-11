@@ -92,7 +92,9 @@ static int vmm_init(void)
 		goto failed;
 	}
 
-    return 0;
+    r = vmx_init();
+
+    return r;
 
 //failed_unreg:
 	unregister_device();

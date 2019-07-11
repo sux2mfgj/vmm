@@ -3,8 +3,10 @@
 #include <asm/processor.h>
 
 #include <linux/mm.h>
+#include <linux/percpu-defs.h>
 
 #include "vmx.h"
+#include "x86.h"
 
 struct vmcs {
 	u32 revision_id;
@@ -12,35 +14,9 @@ struct vmcs {
 	u32 data[1];
 };
 
-static int vmxon_cpu = -1;
-static struct vmcs *vmxon_region;
+//static int vmxon_cpu = -1;
+static DEFINE_PER_CPU(struct vmcs*, vmxon_region);
 static struct vmcs *vmcs;
-
-static inline int check_vmoperation_result(void)
-{
-	uint64_t rflags;
-	int r = 0;
-
-	asm volatile("pushfq\n\t"
-		     "pop %0"
-		     : "=g"(rflags));
-
-	r = rflags & X86_EFLAGS_CF;
-	printk("vmm: rflags %llx\n", rflags);
-	if (r) {
-		printk(KERN_DEBUG "vmm: VMfailnvalid\n");
-		return r;
-	}
-
-	r = rflags & X86_EFLAGS_ZF;
-	if (r) {
-		//r = vmcs_read(VM_INSTRUCTIN_ERROR);
-		printk(KERN_DEBUG "vmm: VMfailValid: error code %d\n", r);
-		return r;
-	}
-
-	return 0;
-}
 
 static struct vmcs *alloc_vmcs_region(int cpu)
 {
@@ -74,6 +50,18 @@ static int vmxon(u64 address)
 		     : "memory", "cc");
 
 	return error;
+}
+
+static int vmxoff(void)
+{
+	u8 error;
+	asm volatile("vmxoff; setna %0" : "=q"(error));
+	if (error) {
+		printk(KERN_ERR "vmm: failed to vmxoff\n");
+		return error;
+	}
+
+	return 0;
 }
 
 static int vmclear(u64 address)
@@ -122,65 +110,80 @@ static int vmwrite(u64 field, u64 value)
 	return error;
 }
 
-int vmx_run(void)
+static int setup_vmcs_guest_field(void)
 {
-	u64 msr_vmx_basic;
-	u64 pa_vmx, pa_vmcs;
-	u64 cr0, cr4, msr_tmp;
-	int r;
-	int cpu = smp_processor_id();
+    int r = 0;
 
-	rdmsrl(MSR_IA32_VMX_BASIC, msr_vmx_basic);
-	vmxon_region = alloc_vmcs_region(cpu);
+	u16 es = read_es();
+	u16 cs = read_cs();
+	u16 ss = read_ss();
+	u16 ds = read_ds();
+	u16 fs = read_fs();
+	u16 gs = read_gs();
+	u16 ldtr = read_ldt();
+	u16 tr = read_tr();
 
-	vmxon_region->revision_id = (u32)msr_vmx_basic;
+	// configuration of guest state areas.
+	r |= vmwrite(GUEST_ES_SELECTOR, es);
+	r |= vmwrite(GUEST_CS_SELECTOR, cs);
+	r |= vmwrite(GUEST_SS_SELECTOR, ss);
+	r |= vmwrite(GUEST_DS_SELECTOR, ds);
+	r |= vmwrite(GUEST_FS_SELECTOR, fs);
+	r |= vmwrite(GUEST_GS_SELECTOR, gs);
+	r |= vmwrite(GUEST_LDTR_SELECTOR, ldtr);
+	r |= vmwrite(GUEST_TR_SELECTOR, tr);
 
-	cr0 = read_cr0();
-	rdmsrl(MSR_IA32_VMX_CR0_FIXED1, msr_tmp);
-	cr0 &= msr_tmp;
-	rdmsrl(MSR_IA32_VMX_CR0_FIXED0, msr_tmp);
-	cr0 |= msr_tmp;
-	write_cr0(cr0);
+	printk(KERN_DEBUG "vmm: es 0x%x, cs 0x%x, ss 0x%x\n", es, cs, ss);
+	printk(KERN_DEBUG "vmm: ds 0x%x, fs 0x%x, ldtr 0x%x, tr 0x%x\n", ds, fs,
+	       ldtr, tr);
 
-	cr4 = read_cr4();
-	rdmsrl(MSR_IA32_VMX_CR4_FIXED1, msr_tmp);
-	cr4 &= msr_tmp;
-	rdmsrl(MSR_IA32_VMX_CR4_FIXED0, msr_tmp);
-	cr4 |= msr_tmp;
-	write_cr4(cr4);
-
-	pa_vmx = __pa(vmxon_region);
-
-	printk("%p %ld\n", vmxon_region, (uintptr_t)pa_vmx);
-	r = vmxon(pa_vmx);
 	if (r) {
-		printk(KERN_ERR "vmm: failed to vmxon [%d]\n", r);
-		return r;
-	}
-	vmxon_cpu = cpu;
-
-	vmcs = alloc_vmcs_region(cpu);
-	vmcs->revision_id = (u32)msr_vmx_basic;
-	pa_vmcs = __pa(vmcs);
-
-	r = vmclear(pa_vmcs);
-	if (r) {
-		printk(KERN_ERR "vmm: vmclear failed [%d]\n", r);
+		printk(KERN_ERR
+		       "vmm: failed to configurate the segment selectors[%d]\n",
+		       r);
 		return r;
 	}
 
-	r = vmptrld(pa_vmcs);
+	r |= vmwrite(GUEST_ES_LIMIT, load_segment_limit(es));
+	r |= vmwrite(GUEST_CS_LIMIT, load_segment_limit(cs));
+	r |= vmwrite(GUEST_SS_LIMIT, load_segment_limit(ss));
+	r |= vmwrite(GUEST_DS_LIMIT, load_segment_limit(ds));
+	r |= vmwrite(GUEST_FS_LIMIT, load_segment_limit(fs));
+	r |= vmwrite(GUEST_GS_LIMIT, load_segment_limit(gs));
+	r |= vmwrite(GUEST_LDTR_LIMIT, load_segment_limit(ldtr));
+	r |= vmwrite(GUEST_TR_LIMIT, load_segment_limit(tr));
+
 	if (r) {
-		printk(KERN_ERR "vmm: vmptrld failed [%d]\n", r);
+		printk(KERN_ERR
+		       "vmm: failed to configurate the segment limits. [%d]\n", r);
 		return r;
 	}
 
-	u32 msr_off = 0;
-	if (msr_vmx_basic & VMX_BASIC_TRUE_CTLS) {
-		msr_off = 0xc;
-	}
+    r |= vmwrite(GUEST_ES_AR_BYTES, load_access_right(es));
+    r |= vmwrite(GUEST_CS_AR_BYTES, load_access_right(cs));
+    r |= vmwrite(GUEST_SS_AR_BYTES, load_access_right(ss));
+    r |= vmwrite(GUEST_DS_AR_BYTES, load_access_right(ds));
+    r |= vmwrite(GUEST_FS_AR_BYTES, load_access_right(fs));
+    r |= vmwrite(GUEST_GS_AR_BYTES, load_access_right(gs));
+    r |= vmwrite(GUEST_LDTR_AR_BYTES, load_access_right(ldtr));
+    r |= vmwrite(GUEST_TR_AR_BYTES, load_access_right(tr));
 
-	printk(KERN_DEBUG "vmm: msr_off %d\n", msr_off);
+    if(r) {
+        printk(KERN_ERR "vmm: failed to configurate the access right[%d]\n", r);
+    }
+
+    r |= vmwrite(GUEST_INTERRUPTIBILITY_INFO, 0);
+    r |= vmwrite(GUEST_ACTIVITY_STATE, GUEST_ACTIVITY_ACTIVE);
+    u64 msr_debug_ctl;
+    rdmsrl(MSR_IA32_DEBUGCTLMSR, msr_debug_ctl);
+    r |= vmwrite(GUEST_IA32_DEBUGCTL, msr_debug_ctl);
+
+    return r;
+}
+
+static int setup_vmcs(u32 msr_off)
+{
+    int r = 0;
 
 	u32 vm_entry_ctrl = VM_ENTRY_IA32E_MODE;
 	adjust_ctrl_value(MSR_IA32_VMX_ENTRY_CTLS + msr_off, &vm_entry_ctrl);
@@ -230,34 +233,151 @@ int vmx_run(void)
 
 	if (r) {
 		printk(KERN_ERR
-		       "vmm: error occured at configuration of control field[%d]\n",
+		       "vmm: failed to configurate the control field[%d]\n",
 		       r);
-        return r;
+		return r;
 	}
 
-    // configuration of guest state areas.
+    r = setup_vmcs_guest_field();
+    if(r)
+    {
+        printk(KERN_ERR "vmm: failed to guest filed of vmcs. [%d]", r);
+        return r;
+    }
+
+    return r;
+}
+
+static void vmx_enable(void *junk)
+{
+	int r;
+
+	u64 msr_vmx_basic;
+	u64 pa_vmx;
+	u64 cr0, cr4, msr_tmp;
+
+    int cpu = raw_smp_processor_id();
+
+    rdmsrl(MSR_IA32_VMX_BASIC, msr_vmx_basic);
+	struct vmcs* vmxon_vmcs = per_cpu(vmxon_region, cpu);
+
+	vmxon_vmcs->revision_id = (u32)msr_vmx_basic;
+
+	cr0 = read_cr0();
+	rdmsrl(MSR_IA32_VMX_CR0_FIXED1, msr_tmp);
+	cr0 &= msr_tmp;
+	rdmsrl(MSR_IA32_VMX_CR0_FIXED0, msr_tmp);
+	cr0 |= msr_tmp;
+	write_cr0(cr0);
+
+	cr4 = read_cr4();
+	rdmsrl(MSR_IA32_VMX_CR4_FIXED1, msr_tmp);
+	cr4 &= msr_tmp;
+	rdmsrl(MSR_IA32_VMX_CR4_FIXED0, msr_tmp);
+	cr4 |= msr_tmp;
+	write_cr4(cr4);
+
+	pa_vmx = __pa(vmxon_vmcs);
+
+	printk("%p %08lx\n", vmxon_vmcs, (uintptr_t)pa_vmx);
+
+	r = vmxon(pa_vmx);
+	if (r) {
+		printk(KERN_ERR "vmm: failed to vmxon [%d]\n", r);
+	}
+
+    /*
+	struct vmcs* vmcs = alloc_vmcs_region(cpu);
+	vmcs->revision_id = (u32)msr_vmx_basic;
+	u64 pa_vmcs = __pa(vmcs);
+
+	r = vmclear(pa_vmcs);
+	if (r) {
+		printk(KERN_ERR "vmm: vmclear failed [%d]\n", r);
+	}
+
+	r = vmptrld(pa_vmcs);
+	if (r) {
+		printk(KERN_ERR "vmm: vmptrld failed [%d]\n", r);
+	}
+
+	u32 msr_off = 0;
+	if (msr_vmx_basic & VMX_BASIC_TRUE_CTLS) {
+		msr_off = 0xc;
+	}
+	printk(KERN_DEBUG "vmm: msr_off %d\n", msr_off);
+    */
+
+    //r = setup_vmcs(msr_off);
+    //if(r)
+    //{
+    //    printk(KERN_ERR "vmm: failed to setup the vmcs fileds[%d]\n", r);
+    //}
+
+	// TODO
+
+}
+
+int vmx_run(void)
+{
+    on_each_cpu(vmx_enable, NULL, 1);
 
 	return 0;
 }
 
-void vmxoff(void *junk)
+static void vmx_closing(void *junk)
 {
-	int cpu = smp_processor_id();
-	if (vmxon_cpu == cpu) {
-		u8 error;
-		asm volatile("vmxoff; setna %0" : "=q"(error));
-		if (error) {
-			printk(KERN_ERR "vmm: failed to vmxoff\n");
-			return;
-		}
+	int r;
 
-		printk("vmm: vmxoff success\n");
-	}
+	int cpu = raw_smp_processor_id();;
+
+    //TODO: fix it.
+    //it is not vmxon_region. it should be cleared the vmcs for guest os.
+    //struct vmcs* vmcs = per_cpu(vmxon_region, cpu);
+    //u64 pa_vmcs = __pa(vmcs);
+
+    //r = vmclear(pa_vmcs);
+    //if (r) {
+    //    printk(KERN_ERR "vmm: vmclear failed[%d]\n", r);
+    //    return;
+    //}
+
+    r = vmxoff();
+    if (r) {
+        printk(KERN_ERR "vmm: vmxoff failed[%d]\n", r);
+        return;
+    }
+
+    //__free_page(virt_to_page(vmcs));
+    __free_page(virt_to_page(per_cpu(vmxon_region, cpu)));
+
+    vmcs = NULL;
+    vmxon_region = NULL;
+
+    printk("vmm: vmxoff success [cpu %d]\n", cpu);
+}
+
+int vmx_init(void)
+{
+    int cpu;
+    for_each_possible_cpu(cpu) {
+        struct vmcs *vmcs;
+
+        vmcs = alloc_vmcs_region(cpu);
+        if(!vmcs)
+        {
+            return -ENOMEM;
+        }
+
+        per_cpu(vmxon_region, cpu) = vmcs;
+    }
+
+	return 0;
 }
 
 int vmx_deinit(void)
 {
-	on_each_cpu(vmxoff, NULL, 1);
+	on_each_cpu(vmx_closing, NULL, 1);
 
 	return 0;
 }
